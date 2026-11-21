@@ -73,4 +73,8 @@ jobs:
         with:
           files: dist/*
           body: |
-            BlyxTorch 0.1.0 trains and deploys fixed-shape, f64 dense networks on the CPU. Extract the archive for your platform and run the bundled XOR example from README.md. Keep the two Blyx source templates beside the executable when emitting a new model. SHA256SUMS covers the three archives.
+            <img src="https://raw.githubusercontent.com/Rahulchaube1/blyxtorch/v0.1.1/assets/logo.png" width="88" alt="BlyxTorch bird logo">
+
+            This release adopts the blue bird as the BlyxTorch logo. All three native downloads include the original PNG at `assets/logo.png`.
+
+            Extract the archive for your platform and follow the [BlyxTorch tutorial](https://doc.blyx-lang.space/guide/blyxtorch) to train the bundled XOR classifier. SHA256SUMS lists the checksum for each download.

@@ -1,10 +1,10 @@
-<img src="assets/logo.png" width="88" height="88" alt="BlyxTorch">
+<img src="assets/logo.png" width="88" alt="BlyxTorch bird logo">
 
 # BlyxTorch
 
 Train a small dense neural network, inspect its gradients, and ship it as a standalone CPU executable. BlyxTorch specializes the network shape ahead of time. Its differentiation rules, layer generator, losses, optimizers, checkpoint handling and command-line trainer are written in Blyx.
 
-**Version 0.1.0** runs on Windows x64, Linux x64 and Apple Silicon macOS. The native downloads include a ready-to-train binary classifier. Python and PyTorch are only used by the optional independent verification tools. [Download the release](https://github.com/Rahulchaube1/blyxtorch/releases/tag/v0.1.0) · [Handbook](https://doc.blyx-lang.space/guide/blyxtorch) · [Browser example](https://www.blyx-lang.space/play?example=package-blyxtorch)
+**Version 0.1.1** runs on Windows x64, Linux x64 and Apple Silicon macOS. The native downloads include a ready-to-train binary classifier. Python and PyTorch are only used by the optional independent verification tools. [Download the release](https://github.com/Rahulchaube1/blyxtorch/releases/tag/v0.1.1) · [Handbook](https://doc.blyx-lang.space/guide/blyxtorch) · [Browser example](https://www.blyx-lang.space/play?example=package-blyxtorch)
 
 ## Install with a package manager
 

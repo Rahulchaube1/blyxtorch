@@ -28,7 +28,7 @@ def main():
             return proc.stdout
         csv_data = ROOT/"fixtures/xor.csv"
         pred_data = ROOT/"fixtures/xor-features.csv"
-        assert invoke(cli,"--version").strip()=="BlyxTorch 0.1.0"
+        assert invoke(cli,"--version").strip()=="BlyxTorch 0.1.1"
         emitted=invoke(cli,"emit","2,4,1","binary","tanh")
         assert emitted == (ROOT/"default_model.blyx").read_text(encoding="utf8")
         weights=invoke(cli,"train",csv_data,"250","0.03","4","adam","7")

@@ -78,7 +78,7 @@ def main():
                 if rep>=args.warmups:
                     values[label].append(ms)
         import torch, numpy
-        result = {"framework":"BlyxTorch 0.1.0","torch":str(torch.__version__),"numpy":numpy.__version__,
+        result = {"framework":subprocess.check_output([exe, "--version"], text=True).strip(),"torch":str(torch.__version__),"numpy":numpy.__version__,
                   "python":platform.python_version(),"platform":platform.platform(),"cpu":platform.processor(),
                   "rows":args.rows,"warmups":args.warmups,"measured_runs":args.runs,"threads":1,
                   "csv_sha256":hashlib.sha256(data.read_bytes()).hexdigest(),"result":reference,

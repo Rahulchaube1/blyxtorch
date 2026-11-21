@@ -141,7 +141,7 @@ def main():
              ([3, 1], "mse", "tanh")]
     with tempfile.TemporaryDirectory() as tmp:
         results = [check_case(args.exe.resolve(), args.compiler, Path(tmp), *case, rng) for case in cases]
-    report = {"framework":"BlyxTorch 0.1.0", "torch":str(torch.__version__),
+    report = {"framework":command(args.exe.resolve(), "--version").strip(), "torch":str(torch.__version__),
               "dtype":"float64", "cases":results}
     if args.report:
         args.report.write_text(json.dumps(report, indent=2) + "\n", encoding="utf8")
