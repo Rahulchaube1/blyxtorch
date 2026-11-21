@@ -6,6 +6,23 @@ Train a small dense neural network, inspect its gradients, and ship it as a stan
 
 **Version 0.1.0** runs on Windows x64, Linux x64 and Apple Silicon macOS. The native downloads include a ready-to-train binary classifier. Python and PyTorch are only used by the optional independent verification tools. [Download the release](https://github.com/Rahulchaube1/blyxtorch/releases/tag/v0.1.0) · [Handbook](https://doc.blyx-lang.space/guide/blyxtorch) · [Browser example](https://www.blyx-lang.space/play?example=package-blyxtorch)
 
+## Install with a package manager
+
+On Apple Silicon macOS or x86-64 Linux, install the tested Homebrew formula.
+
+```sh
+brew install rahulchaube1/blyx/blyxtorch
+```
+
+On Windows x64, add the project bucket and install the command from PowerShell.
+
+```powershell
+scoop bucket add blyx https://github.com/Rahulchaube1/scoop-blyx
+scoop install blyx/blyxtorch
+```
+
+Run `blyxtorch --help` to see the default network's input schema. With a package-manager install the command is on PATH. The examples below use the executable and fixtures supplied in the release archive. [Homebrew formula](https://github.com/Rahulchaube1/homebrew-blyx/blob/main/Formula/blyxtorch.rb) · [Scoop manifest](https://github.com/Rahulchaube1/scoop-blyx/blob/main/bucket/blyxtorch.json)
+
 ## Train your first network
 
 Extract the release archive for your machine. These commands train a two-input network on the four XOR examples, save the weights and load them in a separate process for prediction.
