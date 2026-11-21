@@ -120,7 +120,8 @@ jobs:
           cmp assets/logo.png "$unpack/extension/logo.png"
           native="$unpack/extension/native/linux-x64/blyxtorch"
           test -x "$native" && test -x "$unpack/extension/native/macos-arm64/blyxtorch"
-          test "$("$native" --version)" = "BlyxTorch $version"
+          runtime_version=$(awk -F '"' '/^version = / {print $2; exit}' Blyx.toml)
+          test "$("$native" --version)" = "BlyxTorch $runtime_version"
           "$native" train-score projects/print-queue/train.csv projects/print-queue/holdout.csv 180 0.03 4 adam 7 | jq -e '.rows == 6 and .mean_loss < 0.01'
       - uses: actions/upload-artifact@v4
         with:

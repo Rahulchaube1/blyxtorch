@@ -1,4 +1,4 @@
-<img src="assets/logo.png" width="88" alt="BlyxTorch bird logo">
+<img src="assets/logo.png" width="88" alt="A blue-crested bird with half-lidded eyes and a bright orange bill.">
 
 # BlyxTorch
 

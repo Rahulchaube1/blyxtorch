@@ -18,12 +18,4 @@ The native tasks support Windows x64, Linux x64 and macOS arm64. The portable si
 
 ## Install without a marketplace connection
 
-Download the Blyx Language VSIX and BlyxTorch VSIX on a connected machine. On the target desktop choose **Extensions: Install from VSIX** for Blyx Language first, followed by BlyxTorch. The trainer runs locally. [Blyx Language VSIX](https://github.com/Rahulchaube1/blyxxxx/releases/download/editor-v1.2.3/blyx-language-1.2.3.vsix) · [BlyxTorch VSIX](https://github.com/Rahulchaube1/blyxtorch/releases/download/v0.2.0/blyxtorch-0.2.0.vsix)
-
-## Connect with Rahul Chaube
-
-[Portfolio](https://www.rahulchaube1.com/) · [GitHub](https://github.com/Rahulchaube1) · [LinkedIn](https://www.linkedin.com/in/rahulchaube1) · [Hugging Face](https://huggingface.co/oncody) · [X](https://x.com/RahulChaube_) · [EverestQ](https://www.everestqai.com/) · [Contact](https://www.rahulchaube1.com/contact)
-
-[Blyx website](https://www.blyx-lang.space/) · [BlyxTorch](https://www.blyx-lang.space/packages/blyxtorch) · [Handbook](https://doc.blyx-lang.space/) · [Community](https://www.blyx-lang.space/community)
-
-Support Rahul’s open-source work through [GitHub Sponsors](https://github.com/sponsors/Rahulchaube1) or [Buy Me a Coffee](https://buymeacoffee.com/rahulchaube).
+Download the Blyx Language VSIX and BlyxTorch VSIX on a connected machine. On the target desktop choose **Extensions: Install from VSIX** for Blyx Language first, followed by BlyxTorch. The trainer runs locally. [Blyx Language VSIX](https://github.com/Rahulchaube1/blyxxxx/releases/download/editor-v1.2.3/blyx-language-1.2.3.vsix) · [BlyxTorch VSIX](https://github.com/Rahulchaube1/blyxxxx/releases/download/framework-editors-v0.1.0/blyxtorch-0.2.1.vsix)

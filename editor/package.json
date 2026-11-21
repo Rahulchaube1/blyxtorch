@@ -2,7 +2,7 @@
   "name": "blyxtorch",
   "displayName": "BlyxTorch",
   "description": "Train and evaluate dense CPU networks in Blyx. Includes native trainers, editable machine-learning projects and editor snippets.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "RahulChaube",
   "license": "(MIT OR Apache-2.0)",
   "icon": "logo.png",
