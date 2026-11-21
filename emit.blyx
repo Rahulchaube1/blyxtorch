@@ -1,0 +1,195 @@
+use std::cli;
+use std::text;
+use std::fs;
+
+fn die(message: str) { stderr_line(message); process_exit(2); }
+fn width(word: str) -> i64 {
+    let mut i = 1;
+    while i <= 64 { if word == int_text(i) { return i; } i += 1; }
+    die("each layer width must be an integer from 1 through 64");
+    0
+}
+fn w(shape: arglist, i: i64) -> i64 { width(args_at(shape,i)) }
+fn offset(shape: arglist, layer: i64) -> i64 {
+    let mut n = 0;
+    let mut i = 0;
+    while i < layer { n += (w(shape,i)+1)*w(shape,i+1); i += 1; }
+    n
+}
+fn sep(index: i64) { if index > 0 { print!(", "); } }
+fn name(prefix: str, i: i64) -> str { text_concat(prefix,int_text(i)) }
+fn metadata(key: str, value: i64) {
+    print!("pub fn "); print!(key); print!("() -> i64 { "); print!(value); println!(" }");
+}
+fn activation(op: str) -> str {
+    if op == "tanh" { return "btx_tanh_value"; }
+    if op == "relu" { return "btx_relu_value"; }
+    "btx_logistic"
+}
+fn emit_layer(layer: i64, input: i64, output: i64, base: i64, op: str, hidden: bool) {
+    print!("fn "); print!(name("bt_layer",layer)); println!("(p: vector, a: vector) -> vector {");
+    println!("    [");
+    let mut j = 0;
+    while j < output {
+        print!("        ");
+        if hidden { print!(activation(op)); print!("("); }
+        print!("btx_affine(p, a, "); print!(base); print!(", "); print!(input); print!(", ");
+        print!(output); print!(", "); print!(j); print!(")");
+        if hidden { print!(")"); }
+        if j+1 < output { print!(","); }
+        println!(); j += 1;
+    }
+    println!("    ]"); println!("}");
+}
+fn forward(shape: arglist) {
+    println!("    if !btx_valid(p,bt_parameters()) || !btx_valid(x,bt_inputs()) { return []; }");
+    println!("    let a0 = x;");
+    let mut i = 0;
+    while i+1 < args_len(shape) {
+        print!("    let "); print!(name("a",i+1)); print!(" = "); print!(name("bt_layer",i));
+        print!("(p, "); print!(name("a",i)); println!(");");
+        print!("    if !btx_valid("); print!(name("a",i+1)); print!(", "); print!(w(shape,i+1)); println!(") { return []; }");
+        i += 1;
+    }
+}
+fn output_kernels(n: i64, objective: str) {
+    println!("fn bt_transform(z: vector) -> vector {");
+    if objective == "mse" { println!("    z"); }
+    else if objective == "binary" { println!("    [btx_logistic(at(z,0))]"); }
+    else {
+        println!("    let m = btx_max(z); let s = btx_exp_sum(z,m);");
+        print!("    ["); let mut i=0;
+        while i<n { sep(i); print!("btx_exp_shift(at(z,"); print!(i); print!(")-m)/s"); i+=1; }
+        println!("]");
+    }
+    println!("}");
+    println!("fn bt_output_delta(z: vector, t: vector) -> vector {");
+    if objective == "binary" { println!("    [btx_bce_slope(at(z,0),at(t,0))]"); }
+    else {
+        if objective == "softmax" { println!("    let probabilities = bt_transform(z);"); }
+        print!("    ["); let mut i=0;
+        while i<n {
+            sep(i);
+            if objective=="mse" {
+                print!("2.0*(at(z,"); print!(i); print!(")-at(t,"); print!(i); print!("))/"); print!(n); print!(".0");
+            } else {
+                print!("at(probabilities,"); print!(i); print!(")-btx_indicator(at(t,0),"); print!(i); print!(")");
+            }
+            i+=1;
+        }
+        println!("]");
+    }
+    println!("}");
+}
+fn back_layer(shape: arglist, here: i64, act: str) {
+    let size=w(shape,here); let base=offset(shape,here);
+    print!("    let "); print!(name("d",here)); println!(" = [");
+    let mut j=0;
+    while j<size {
+        print!("        btx_pull("); print!(name("d",here+1)); print!(", p, "); print!(base);
+        print!(", "); print!(size); print!(", "); print!(j); print!(")*");
+        if act=="relu" { print!("btx_relu_slope("); } else if act=="tanh" { print!("btx_tanh_slope("); } else { print!("btx_sigmoid_slope("); }
+        print!("at("); print!(name("a",here)); print!(", "); print!(j); print!("))");
+        if j+1<size { print!(","); }
+        println!(); j+=1;
+    }
+    println!("    ];");
+}
+fn weight_entries(shape: arglist, init: bool) {
+    let mut layer=0;
+    while layer+1<args_len(shape) {
+        let input=w(shape,layer); let output=w(shape,layer+1); let base=offset(shape,layer);
+        let mut j=0;
+        while j<output {
+            let mut k=0;
+            while k<input {
+                let idx=base+j*input+k;
+                if init {
+                    sep(idx); print!("btx_weight(seed,"); print!(idx); print!(","); print!(input+output); print!(")");
+                } else {
+                    print!(", at("); print!(name("d",layer+1)); print!(","); print!(j);
+                    print!(")*at("); print!(name("a",layer)); print!(","); print!(k); print!(")");
+                }
+                k+=1;
+            }
+            j+=1;
+        }
+        j=0;
+        while j<output {
+            if init { print!(", 0.0"); } else { print!(", at("); print!(name("d",layer+1)); print!(","); print!(j); print!(")"); }
+            j+=1;
+        }
+        println!(); layer+=1;
+    }
+}
+fn emit_io_vector(fname: str, size: i64) {
+    print!("fn "); print!(fname); println!("(fields: arglist, start: i64) -> vector {");
+    print!("    if !btx_numeric_fields(fields,start,"); print!(size); println!(") { return []; }");
+    print!("    ["); let mut i=0;
+    while i<size { sep(i); print!("text_number(args_at(fields,start+"); print!(i); print!("))"); i+=1; }
+    println!("]"); println!("}");
+}
+fn optimizer_kernels(n: i64) {
+    print!("pub fn bt_zeros() -> vector { ["); let mut i=0;
+    while i<n { sep(i); print!("0"); i+=1; } println!("] }");
+    println!("fn bt_mix(a: vector, b: vector, off: i64, left: f64, right: f64, square: bool) -> vector {");
+    print!("    ["); i=0;
+    while i<n { sep(i); print!("btx_mix_at(a,b,"); print!(i); print!(",off,left,right,square)"); i+=1; }
+    println!("]"); println!("}");
+    println!("fn bt_adam(p: vector, m: vector, v: vector, rate: f64, c1: f64, c2: f64) -> vector {");
+    print!("    ["); i=0;
+    while i<n { sep(i); print!("btx_adam_at(p,m,v,"); print!(i); print!(",rate,c1,c2)"); i+=1; }
+    println!("]"); println!("}");
+}
+fn template_path(directory: str, fname: str) -> str {
+    let p=path_join(directory,fname);
+    if is_file(p) { return p; }
+    die(text_concat("missing release source template: ",p)); ""
+}
+pub fn btx_emit(layout: str, objective: str, act: str, directory: str) {
+    let shape=text_split(layout,","); let layers=args_len(shape)-1;
+    if layers<1 || layers>8 { die("supply input and output widths, with up to eight affine layers"); }
+    if objective!="mse" && objective!="binary" && objective!="softmax" { die("objective must be mse, binary, or softmax"); }
+    if act!="relu" && act!="tanh" && act!="sigmoid" { die("activation must be relu, tanh, or sigmoid"); }
+    let output=w(shape,layers); let total=offset(shape,layers);
+    if total>1024 { die("this release supports up to 1024 parameters per model"); }
+    if objective=="binary" && output!=1 { die("binary networks need one output logit"); }
+    if objective=="softmax" && output<2 { die("softmax networks need at least two output logits"); }
+    let mut targets=output; if objective=="softmax" { targets=1; }
+    let math=read_text(template_path(directory,"blyxtorch.blyx"));
+    let runner=read_text(template_path(directory,"training.blyx"));
+    println!("// Generated by BlyxTorch 0.1.0. Compile, import or inspect this Blyx source.");
+    println!("// MIT OR Apache-2.0. Copyright Rahul Chaube and BlyxTorch contributors.");
+    println!(math); println!(runner);
+    metadata("bt_inputs",w(shape,0)); metadata("bt_outputs",output);
+    metadata("bt_targets",targets); metadata("bt_parameters",total);
+    print!("pub fn bt_objective() -> str { \""); print!(objective); println!("\" }");
+    print!("pub fn bt_model_key() -> str { \"BlyxTorch/1 "); print!(layout); print!(" ");
+    print!(objective); print!(" "); print!(act); println!("\" }");
+    let mut i=0;
+    while i<layers { emit_layer(i,w(shape,i),w(shape,i+1),offset(shape,i),act,i+1<layers); i+=1; }
+    output_kernels(output,objective);
+    println!("pub fn bt_init(seed: i64) -> vector { ["); weight_entries(shape,true); println!("] }");
+    println!("fn bt_logits(p: vector, x: vector) -> vector {");
+    forward(shape); print!("    "); println!(name("a",layers)); println!("}");
+    println!("pub fn bt_predict(p: vector, x: vector) -> vector {");
+    println!("    let z=bt_logits(p,x); if len(z)==0 { return []; } bt_transform(z)");
+    println!("}");
+    println!("pub fn bt_sample_loss(p: vector, x: vector, t: vector) -> vector {");
+    println!("    if !btx_target_ok(t) { return []; }");
+    println!("    let z=bt_logits(p,x); if len(z)==0 { return []; }");
+    println!("    let cost=btx_cost(z,t); if !btx_finite(cost) { return []; } [cost]");
+    println!("}");
+    println!("pub fn bt_loss_grad(p: vector, x: vector, t: vector) -> vector {");
+    println!("    if !btx_target_ok(t) { return []; }"); forward(shape);
+    print!("    let cost = btx_cost("); print!(name("a",layers)); println!(",t);");
+    print!("    let "); print!(name("d",layers)); print!(" = bt_output_delta("); print!(name("a",layers)); println!(",t);");
+    i=layers-1;
+    while i>0 { back_layer(shape,i,act); i-=1; }
+    print!("    let gradient = [cost"); weight_entries(shape,false); println!("];");
+    println!("    if !btx_valid(gradient,bt_parameters()+1) { return []; }");
+    println!("    gradient"); println!("}");
+    emit_io_vector("bt_parse_x",w(shape,0)); emit_io_vector("bt_parse_t",targets); emit_io_vector("bt_parse_p",total);
+    optimizer_kernels(total);
+    println!("fn main() { bt_command(cli_args()); }");
+}

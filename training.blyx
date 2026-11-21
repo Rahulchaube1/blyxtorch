@@ -1,0 +1,218 @@
+// Shared source included in every generated model, so a model can run independently.
+use std::cli;
+use std::text;
+use std::fs;
+
+fn btx_error(message: str) { stderr_line(text_concat("blyxtorch: ",message)); process_exit(2); }
+fn btx_uint(word: str, upper: i64) -> i64 {
+    if !text_is_number(word) { return -1; }
+    let number=text_number(word); let mut lo=0; let mut hi=upper;
+    while lo<=hi {
+        let mid=lo+(hi-lo)/2; let v=at([mid],0);
+        if number==v { return mid; }
+        if number<v { hi=mid-1; } else { lo=mid+1; }
+    }
+    return -1;
+}
+fn btx_float(n: i64) -> f64 { at([n],0) }
+fn btx_numeric_fields(fields: arglist, start: i64, n: i64) -> bool {
+    if start<0 || args_len(fields)<start+n { return false; }
+    let mut i=0;
+    while i<n {
+        if !text_is_number(args_at(fields,start+i)) { return false; }
+        i+=1;
+    }
+    true
+}
+fn btx_affine(p: vector, a: vector, base: i64, nin: i64, nout: i64, j: i64) -> f64 {
+    let mut value=at(p,base+nin*nout+j); let mut k=0;
+    while k<nin { value+=at(p,base+j*nin+k)*at(a,k); k+=1; }
+    value
+}
+fn btx_pull(delta: vector, p: vector, base: i64, nin: i64, j: i64) -> f64 {
+    let mut total=0.0; let mut k=0;
+    while k<len(delta) { total+=at(delta,k)*at(p,base+k*nin+j); k+=1; }
+    total
+}
+fn btx_relu_slope(a: f64) -> f64 { if a>0.0 { return 1.0; } 0.0 }
+fn btx_tanh_slope(a: f64) -> f64 { (1.0-a)*(1.0+a) }
+fn btx_sigmoid_slope(a: f64) -> f64 { a*(1.0-a) }
+fn btx_weight(seed: i64, index: i64, fan_sum: i64) -> f64 {
+    let prime=2147483647;
+    let mut z=((seed%prime+prime)%prime+104729*(index+1))%prime;
+    z=(z*z+48271)%prime; z=(z*z+48271)%prime;
+    (2.0*(btx_float(z)/2147483647.0)-1.0)*btx_sqrt(6.0/btx_float(fan_sum))
+}
+fn btx_max(z: vector) -> f64 {
+    let mut m=at(z,0); let mut i=1;
+    while i<len(z) { if at(z,i)>m { m=at(z,i); } i+=1; }
+    m
+}
+fn btx_exp_sum(z: vector, m: f64) -> f64 {
+    let mut s=0.0; let mut i=0;
+    while i<len(z) { s+=btx_exp_shift(at(z,i)-m); i+=1; }
+    s
+}
+fn btx_indicator(target: f64, index: i64) -> f64 {
+    if target==btx_float(index) { return 1.0; } 0.0
+}
+fn btx_target_ok(t: vector) -> bool {
+    if !btx_valid(t,bt_targets()) { return false; }
+    if bt_objective()=="binary" { return at(t,0)>=0.0 && at(t,0)<=1.0; }
+    if bt_objective()=="softmax" {
+        let v=at(t,0);
+        return v>=0.0 && v<btx_float(bt_outputs()) && v%1.0==0.0;
+    }
+    true
+}
+fn btx_cost(z: vector, t: vector) -> f64 {
+    if bt_objective()=="binary" { return btx_bce_value(at(z,0),at(t,0)); }
+    if bt_objective()=="softmax" {
+        let m=btx_max(z); let s=btx_exp_sum(z,m);
+        let mut i=0;
+        while btx_float(i)!=at(t,0) { i+=1; }
+        return (m-at(z,i))+btx_log_sum(s);
+    }
+    let mut sum_sq=0.0; let mut i=0;
+    while i<len(z) { let d=at(z,i)-at(t,i); sum_sq+=d*d; i+=1; }
+    sum_sq/btx_float(len(z))
+}
+fn btx_mix_at(a: vector,b: vector,i: i64,off: i64,left: f64,right: f64,square: bool) -> f64 {
+    let x=at(b,i+off);
+    if square { return left*at(a,i)+right*x*x; }
+    left*at(a,i)+right*x
+}
+fn btx_adam_at(p: vector,m: vector,v: vector,i: i64,rate: f64,c1: f64,c2: f64) -> f64 {
+    at(p,i)-rate*(at(m,i)/c1)/(btx_sqrt(at(v,i)/c2)+0.00000001)
+}
+fn btx_names(prefix: str, size: i64) -> str {
+    let mut fields=args_new(); let mut i=0;
+    while i<size { fields=args_push(fields,text_concat(prefix,int_text(i))); i+=1; }
+    args_join(fields,",")
+}
+pub fn bt_feature_header() -> str { btx_names("x",bt_inputs()) }
+pub fn bt_training_header() -> str {
+    let mut labels=btx_names("y",bt_targets());
+    if bt_objective()=="softmax" { labels="class"; }
+    text_concat(text_concat(bt_feature_header(),","),labels)
+}
+fn btx_read(path: str, labelled: bool) -> arglist {
+    let lines=text_lines(read_text(path));
+    if args_len(lines)<2 { btx_error("a CSV needs a header and at least one data row"); }
+    let mut header=bt_feature_header();
+    if labelled { header=bt_training_header(); }
+    if text_trim(args_at(lines,0))!=header { btx_error(text_concat("expected CSV header ",header)); }
+    lines
+}
+fn btx_fields(lines: arglist, row: i64, labelled: bool) -> arglist {
+    let fields=text_split(args_at(lines,row),",");
+    let mut n=bt_inputs();
+    if labelled { n+=bt_targets(); }
+    if args_len(fields)!=n { btx_error(text_concat("incorrect column count at line ",int_text(row+1))); }
+    fields
+}
+fn btx_print_row(v: vector) {
+    let mut i=0;
+    while i<len(v) { if i>0 { print!(","); } print!(at(v,i)); i+=1; }
+    println!();
+}
+fn btx_checkpoint(p: vector) {
+    if !btx_valid(p,bt_parameters()) { btx_error("nonfinite model weights"); }
+    println!(bt_model_key()); btx_print_row(p);
+}
+fn btx_restore(path: str) -> vector {
+    let lines=text_lines(read_text(path));
+    if args_len(lines)!=2 || args_at(lines,0)!=bt_model_key() { btx_error("checkpoint model key or line count mismatch"); }
+    let fields=text_split(args_at(lines,1),",");
+    if args_len(fields)!=bt_parameters() { btx_error("incorrect checkpoint parameter count"); }
+    let p=bt_parse_p(fields,0);
+    if !btx_valid(p,bt_parameters()) { btx_error("invalid checkpoint weight"); }
+    p
+}
+fn btx_arg(a: arglist, i: i64, fallback: str) -> str {
+    if i<args_len(a) { return args_at(a,i); } fallback
+}
+fn btx_train(a: arglist) {
+    if args_len(a)<2 || args_len(a)>7 { btx_error("train DATA.csv [epochs] [rate] [batch] [adam|sgd] [seed]"); }
+    let epochs=btx_uint(btx_arg(a,2,"100"),1000000);
+    let eta=btx_arg(a,3,"0.03"); let batch=btx_uint(btx_arg(a,4,"32"),2147483647);
+    let optimizer=btx_arg(a,5,"adam"); let seed=btx_uint(btx_arg(a,6,"7"),2147483646);
+    if epochs<1 || batch<1 || seed<0 || !text_is_number(eta) || text_number(eta)<=0.0 {
+        btx_error("epochs, rate and batch must be positive; seed must be a nonnegative integer");
+    }
+    if optimizer!="adam" && optimizer!="sgd" { btx_error("optimizer must be adam or sgd"); }
+    let lr=text_number(eta); let lines=btx_read(args_at(a,1),true);
+    let mut p=bt_init(seed); let zero=bt_zeros(); let mut moment=zero; let mut variance=zero;
+    let mut b1=1.0; let mut b2=1.0; let mut epoch=0;
+    while epoch<epochs {
+        let mut row=1;
+        while row<args_len(lines) {
+            let mut accum=zero; let mut count=0;
+            while count<batch && row<args_len(lines) {
+                let fields=btx_fields(lines,row,true);
+                let pack=bt_loss_grad(p,bt_parse_x(fields,0),bt_parse_t(fields,bt_inputs()));
+                if len(pack)==0 { btx_error(text_concat("invalid training input or nonfinite result at line ",int_text(row+1))); }
+                accum=bt_mix(accum,pack,1,1.0,1.0,false); count+=1; row+=1;
+            }
+            let grad=bt_mix(zero,accum,0,0.0,1.0/btx_float(count),false);
+            if optimizer=="sgd" { p=bt_mix(p,grad,0,1.0,-lr,false); }
+            else {
+                b1*=0.9; b2*=0.999;
+                moment=bt_mix(moment,grad,0,0.9,0.1,false);
+                variance=bt_mix(variance,grad,0,0.999,0.001,true);
+                if !btx_valid(variance,bt_parameters()) { btx_error("nonfinite Adam second moment"); }
+                p=bt_adam(p,moment,variance,lr,1.0-b1,1.0-b2);
+            }
+            if !btx_valid(p,bt_parameters()) { btx_error("nonfinite update; check data scale and learning rate"); }
+        }
+        epoch+=1;
+    }
+    btx_checkpoint(p);
+}
+fn btx_eval(a: arglist, mode: str) {
+    if args_len(a)!=3 { btx_error("predict, score and gradient each take CHECKPOINT and DATA.csv"); }
+    let p=btx_restore(args_at(a,1)); let labelled=mode!="predict";
+    let lines=btx_read(args_at(a,2),labelled);
+    let mut total=0.0; let mut pass=0;
+    // Validate the complete report before writing its header or rows to stdout.
+    while pass<2 {
+        if pass==1 && mode=="predict" { println!(btx_names("prediction",bt_outputs())); }
+        if pass==1 && mode=="gradient" { println!(text_concat("loss,",btx_names("g",bt_parameters()))); }
+        let mut row=1;
+        while row<args_len(lines) {
+            let f=btx_fields(lines,row,labelled); let x=bt_parse_x(f,0);
+            let mut out=[];
+            if mode=="score" { out=bt_sample_loss(p,x,bt_parse_t(f,bt_inputs())); }
+            else if labelled { out=bt_loss_grad(p,x,bt_parse_t(f,bt_inputs())); }
+            else { out=bt_predict(p,x); }
+            if len(out)==0 { btx_error(text_concat("invalid input or nonfinite result at line ",int_text(row+1))); }
+            if mode=="score" {
+                // An online mean also avoids summing many large finite losses.
+                total+=(at(out,0)-total)/btx_float(row);
+            } else if pass==1 { btx_print_row(out); }
+            row+=1;
+        }
+        if mode=="score" {
+            print!("{\"rows\":"); print!(args_len(lines)-1); print!(",\"mean_loss\":"); print!(total); println!("}");
+            return;
+        }
+        pass+=1;
+    }
+}
+pub fn bt_command(a: arglist) {
+    let cmd=btx_arg(a,0,"--help");
+    if cmd=="--version" { println!("BlyxTorch 0.1.0"); return; }
+    if cmd=="--help" || cmd=="help" {
+        println!(bt_model_key()); println!("train DATA.csv [epochs] [rate] [batch] [adam|sgd] [seed]");
+        println!("init [seed] | predict CHECKPOINT FEATURES.csv | score CHECKPOINT LABELLED.csv | gradient CHECKPOINT LABELLED.csv");
+        println!(text_concat("Training CSV: ",bt_training_header())); return;
+    }
+    if cmd=="init" {
+        let seed=btx_uint(btx_arg(a,1,"7"),2147483646);
+        if args_len(a)>2 || seed<0 { btx_error("init needs an optional nonnegative integer seed"); }
+        btx_checkpoint(bt_init(seed)); return;
+    }
+    if cmd=="train" { btx_train(a); return; }
+    if cmd=="predict" || cmd=="score" || cmd=="gradient" { btx_eval(a,cmd); return; }
+    btx_error(text_concat("unknown command: ",cmd));
+}

@@ -1,0 +1,31 @@
+use std::cli;
+use default_model;
+
+fn require(ok: bool, label: str) {
+    if !ok { stderr_line(label); process_exit(1); }
+}
+fn close(a: f64, b: f64, tol: f64) -> bool { a >= b-tol && a <= b+tol }
+fn main() {
+    let w=bt_dual(1.0,1.0);
+    let err=bt_sub(bt_mul(w,bt_dual(2.0,0.0)),bt_dual(5.0,0.0));
+    let loss=bt_square(err);
+    require(at(loss,0)==9.0 && at(loss,1)==-12.0,"reused-node chain rule");
+    let quotient=bt_div(bt_mul(w,w),bt_add(w,w));
+    require(at(quotient,0)==0.5 && at(quotient,1)==0.5,"division");
+    require(len(bt_div(w,bt_dual(0.0,1.0)))==0,"division domain");
+    require(len(bt_mul([],w))==0 && len(bt_relu([0]))==0,"dual shape validation");
+    require(at(bt_relu(bt_dual(0.0,2.0)),1)==0.0,"ReLU at zero");
+    require(close(at(bt_sigmoid(bt_dual(0.0,2.0)),1),0.5,0.0000000001),"sigmoid gradient");
+    require(close(at(bt_tanh(bt_dual(0.1,1.0)),1),0.99006629084744,0.0000000001),"tanh gradient");
+    require(close(at(bt_softplus(bt_dual(0.0,1.0)),0),0.6931471805599453,0.000000000001),"softplus");
+    require(at(bt_bce_logits(bt_dual(-1000.0,1.0),1.0),0)==1000.0,"BCE on extreme negative logit");
+    require(at(bt_bce_logits(bt_dual(1000.0,1.0),0.0),1)==1.0,"BCE on extreme positive logit");
+    require(at(bt_bce_logits(bt_dual(40.0,1.0),1.0),1)<0.0,"BCE retains small gradient");
+    require(len(bt_bce_logits(w,2.0))==0,"invalid label");
+    let p=bt_init(7); let x=[1.0,0.0];
+    require(bt_parameters()==17 && bt_inputs()==2 && bt_outputs()==1,"default layout");
+    require(len(bt_predict(p,x))==1 && len(bt_loss_grad(p,x,[1]))==18,"default model API");
+    require(len(bt_predict([],x))==0 && len(bt_predict(p,[1]))==0,"inference shape checks");
+    require(len(bt_loss_grad(p,x,[2]))==0 && len(bt_loss_grad(p,x,[]))==0,"training shape checks");
+    println!("BlyxTorch native tests passed");
+}

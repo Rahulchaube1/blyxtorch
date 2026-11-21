@@ -1,0 +1,76 @@
+name: Test and release BlyxTorch
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, target: linux-x64, file: blyxtorch }
+          - { os: windows-latest, target: windows-x64, file: blyxtorch.exe }
+          - { os: macos-latest, target: macos-arm64, file: blyxtorch }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: cargo install --locked --version 0.2.1 blyxc
+      - run: blyxc native-run tests.blyx
+      - run: blyxc native-run example.blyx
+      - name: Build in a clean installation directory
+        shell: bash
+        run: |
+          mkdir -p build dist
+          blyxc build main.blyx -o build/${{ matrix.file }}
+          cp blyxtorch.blyx training.blyx build/
+      - run: python verification/test_cli.py --exe build/${{ matrix.file }}
+      - name: Verify the maximum supported parameter count
+        if: runner.os == 'Linux'
+        run: python verification/test_cli.py --exe build/blyxtorch --largest
+      - name: Package the tested installation
+        shell: bash
+        run: |
+          cp -r fixtures assets README.md LICENSE-MIT LICENSE-APACHE build/
+          cd build
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            7z a "../dist/blyxtorch-${{ matrix.target }}.zip" *
+          else
+            tar -czf "../dist/blyxtorch-${{ matrix.target }}.tar.gz" *
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: blyxtorch-${{ matrix.target }}
+          path: dist/*
+  reference:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: cargo install --locked --version 0.2.1 blyxc
+      - run: python -m pip install --index-url https://download.pytorch.org/whl/cpu torch==2.8.0
+      - run: blyxc build main.blyx -o blyxtorch
+      - run: python verification/pytorch_reference.py --exe ./blyxtorch
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [native, reference]
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - run: cd dist && sha256sum *.zip *.tar.gz > SHA256SUMS
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          body: |
+            BlyxTorch 0.1.0 trains and deploys fixed-shape, f64 dense networks on the CPU. Extract the archive for your platform and run the bundled XOR example from README.md. Keep the two Blyx source templates beside the executable when emitting a new model. SHA256SUMS covers the three archives.

@@ -1,0 +1,18 @@
+use std::cli;
+use emit;
+use default_model;
+fn main() {
+    let args=cli_args();
+    if args_len(args)>0 && args_at(args,0)=="emit" {
+        if args_len(args)!=4 {
+            stderr_line("usage: blyxtorch emit widths mse|binary|softmax tanh|relu|sigmoid");
+            process_exit(2);
+        }
+        btx_emit(args_at(args,1),args_at(args,2),args_at(args,3),exe_dir()); return;
+    }
+    if args_len(args)==0 || args_at(args,0)=="--help" || args_at(args,0)=="help" {
+        println!("blyxtorch emit WIDTHS mse|binary|softmax tanh|relu|sigmoid > model.blyx");
+        println!("The bundled model has two inputs, four hidden units and one binary output.");
+    }
+    bt_command(args);
+}

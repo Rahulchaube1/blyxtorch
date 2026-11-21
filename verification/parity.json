@@ -1,0 +1,52 @@
+{
+  "framework": "BlyxTorch 0.1.0",
+  "torch": "2.12.1+cpu",
+  "dtype": "float64",
+  "cases": [
+    {
+      "layout": "2,4,1",
+      "objective": "binary",
+      "activation": "tanh",
+      "parameters": 17,
+      "rows": 7,
+      "gradient_coordinates": 119,
+      "max_abs_gradient_error": 4.440892098500626e-16
+    },
+    {
+      "layout": "3,4,2,2",
+      "objective": "mse",
+      "activation": "relu",
+      "parameters": 32,
+      "rows": 7,
+      "gradient_coordinates": 224,
+      "max_abs_gradient_error": 2.220446049250313e-16
+    },
+    {
+      "layout": "2,3,3",
+      "objective": "softmax",
+      "activation": "sigmoid",
+      "parameters": 21,
+      "rows": 7,
+      "gradient_coordinates": 147,
+      "max_abs_gradient_error": 2.498001805406602e-16
+    },
+    {
+      "layout": "2,3",
+      "objective": "softmax",
+      "activation": "relu",
+      "parameters": 9,
+      "rows": 7,
+      "gradient_coordinates": 63,
+      "max_abs_gradient_error": 2.7755575615628914e-16
+    },
+    {
+      "layout": "3,1",
+      "objective": "mse",
+      "activation": "tanh",
+      "parameters": 4,
+      "rows": 7,
+      "gradient_coordinates": 28,
+      "max_abs_gradient_error": 1.1102230246251565e-16
+    }
+  ]
+}

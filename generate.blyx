@@ -1,0 +1,10 @@
+use std::cli;
+use emit;
+// Bootstrap the default model from the source release.
+fn main() {
+    let a = cli_args();
+    if args_len(a) != 3 {
+        stderr_line("usage: generate WIDTHS OBJECTIVE ACTIVATION"); process_exit(2);
+    }
+    btx_emit(args_at(a,0), args_at(a,1), args_at(a,2), ".");
+}

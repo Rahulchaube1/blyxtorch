@@ -1,0 +1,12 @@
+use blyxtorch;
+
+fn main() {
+    let weight = bt_dual(1.0, 1.0);
+    let x = bt_dual(2.0, 0.0);
+    let target = bt_dual(5.0, 0.0);
+    let loss = bt_square(bt_sub(bt_mul(weight, x), target));
+    println!(at(loss, 0));
+    println!(at(loss, 1));
+    let updated = bt_dual(at(weight, 0) - 0.125 * at(loss, 1), 0.0);
+    println!(at(bt_square(bt_sub(bt_mul(updated, x), target)), 0));
+}
