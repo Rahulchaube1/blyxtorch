@@ -19,3 +19,11 @@ blyxtorch train-predict print-queue/train.csv print-queue/new-jobs.csv 180 0.03 
 ## Use the editor
 
 Install the BlyxTorch extension. Open `BlyxTorch.code-workspace` from this folder. In a trusted workspace choose **Terminal → Run Task** and select **BlyxTorch: Evaluate print queue** or **BlyxTorch: Predict new print jobs**. Both tasks run the native trainer bundled with the extension. You can edit the CSV files and rerun them. For a portable project, open either `.blyx` file and choose **Blyx: Run File** from the command palette. The two files also run with `blyxc run`. [Project guide](https://www.blyx-lang.space/packages/blyxtorch#projects)
+
+## Connect with Rahul Chaube
+
+[Portfolio](https://www.rahulchaube1.com/) · [GitHub](https://github.com/Rahulchaube1) · [LinkedIn](https://www.linkedin.com/in/rahulchaube1) · [Hugging Face](https://huggingface.co/oncody) · [X](https://x.com/RahulChaube_) · [EverestQ](https://www.everestqai.com/) · [Contact](https://www.rahulchaube1.com/contact)
+
+[Blyx website](https://www.blyx-lang.space/) · [BlyxTorch](https://www.blyx-lang.space/packages/blyxtorch) · [Handbook](https://doc.blyx-lang.space/) · [Community](https://www.blyx-lang.space/community)
+
+Support Rahul’s open-source work through [GitHub Sponsors](https://github.com/sponsors/Rahulchaube1) or [Buy Me a Coffee](https://buymeacoffee.com/rahulchaube).

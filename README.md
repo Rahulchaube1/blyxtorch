@@ -147,3 +147,11 @@ blyxc native-run example.blyx
 On Windows compile with `-o blyxtorch.exe`. The shipped default module can be reproduced from the repository root with `blyxc native-run generate.blyx -- 2,4,1 binary tanh`. The [independent verification repository](https://github.com/Rahulchaube1/blyxtorch-verification) checks the installed binary, compares gradients and optimizer updates with CPU PyTorch, and records the scoring benchmark. Please include the model widths, input, expected output and command when reporting an issue. [Issues](https://github.com/Rahulchaube1/blyxtorch/issues) · [Blyx community](https://www.blyx-lang.space/community)
 
 BlyxTorch is an independent project by Rahul Chaube and contributors. It is distributed under your choice of the [MIT](LICENSE-MIT) or [Apache 2.0](LICENSE-APACHE) license.
+
+## Connect with Rahul Chaube
+
+[Portfolio](https://www.rahulchaube1.com/) · [GitHub](https://github.com/Rahulchaube1) · [LinkedIn](https://www.linkedin.com/in/rahulchaube1) · [Hugging Face](https://huggingface.co/oncody) · [X](https://x.com/RahulChaube_) · [EverestQ](https://www.everestqai.com/) · [Contact](https://www.rahulchaube1.com/contact)
+
+[Blyx website](https://www.blyx-lang.space/) · [BlyxTorch](https://www.blyx-lang.space/packages/blyxtorch) · [Handbook](https://doc.blyx-lang.space/) · [Community](https://www.blyx-lang.space/community)
+
+Support Rahul’s open-source work through [GitHub Sponsors](https://github.com/sponsors/Rahulchaube1) or [Buy Me a Coffee](https://buymeacoffee.com/rahulchaube).
