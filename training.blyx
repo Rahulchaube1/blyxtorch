@@ -132,7 +132,7 @@ fn btx_restore(path: str) -> vector {
 fn btx_arg(a: arglist, i: i64, fallback: str) -> str {
     if i<args_len(a) { return args_at(a,i); } fallback
 }
-fn btx_train(a: arglist) {
+fn btx_train(a: arglist) -> vector {
     if args_len(a)<2 || args_len(a)>7 { btx_error("train DATA.csv [epochs] [rate] [batch] [adam|sgd] [seed]"); }
     let epochs=btx_uint(btx_arg(a,2,"100"),1000000);
     let eta=btx_arg(a,3,"0.03"); let batch=btx_uint(btx_arg(a,4,"32"),2147483647);
@@ -167,12 +167,11 @@ fn btx_train(a: arglist) {
         }
         epoch+=1;
     }
-    btx_checkpoint(p);
+    p
 }
-fn btx_eval(a: arglist, mode: str) {
-    if args_len(a)!=3 { btx_error("predict, score and gradient each take CHECKPOINT and DATA.csv"); }
-    let p=btx_restore(args_at(a,1)); let labelled=mode!="predict";
-    let lines=btx_read(args_at(a,2),labelled);
+fn btx_eval(p: vector, path: str, mode: str) {
+    let labelled=mode!="predict";
+    let lines=btx_read(path,labelled);
     let mut total=0.0; let mut pass=0;
     // Validate the complete report before writing its header or rows to stdout.
     while pass<2 {
@@ -201,9 +200,11 @@ fn btx_eval(a: arglist, mode: str) {
 }
 pub fn bt_command(a: arglist) {
     let cmd=btx_arg(a,0,"--help");
-    if cmd=="--version" { println!("BlyxTorch 0.1.1"); return; }
+    if cmd=="--version" { println!("BlyxTorch 0.2.0"); return; }
     if cmd=="--help" || cmd=="help" {
         println!(bt_model_key()); println!("train DATA.csv [epochs] [rate] [batch] [adam|sgd] [seed]");
+        println!("train-score TRAIN.csv LABELLED.csv [epochs] [rate] [batch] [adam|sgd] [seed]");
+        println!("train-predict TRAIN.csv FEATURES.csv [epochs] [rate] [batch] [adam|sgd] [seed]");
         println!("init [seed] | predict CHECKPOINT FEATURES.csv | score CHECKPOINT LABELLED.csv | gradient CHECKPOINT LABELLED.csv");
         println!(text_concat("Training CSV: ",bt_training_header())); return;
     }
@@ -212,7 +213,20 @@ pub fn bt_command(a: arglist) {
         if args_len(a)>2 || seed<0 { btx_error("init needs an optional nonnegative integer seed"); }
         btx_checkpoint(bt_init(seed)); return;
     }
-    if cmd=="train" { btx_train(a); return; }
-    if cmd=="predict" || cmd=="score" || cmd=="gradient" { btx_eval(a,cmd); return; }
+    if cmd=="train" { btx_checkpoint(btx_train(a)); return; }
+    if cmd=="train-score" || cmd=="train-predict" {
+        if args_len(a)<3 || args_len(a)>8 {
+            btx_error("supply training CSV, evaluation CSV, then optional epochs, rate, batch, optimizer and seed");
+        }
+        let training=args_concat(args_push(args_push(args_new(),"train"),args_at(a,1)),args_tail(a,3));
+        let weights=btx_train(training);
+        if cmd=="train-score" { btx_eval(weights,args_at(a,2),"score"); }
+        else { btx_eval(weights,args_at(a,2),"predict"); }
+        return;
+    }
+    if cmd=="predict" || cmd=="score" || cmd=="gradient" {
+        if args_len(a)!=3 { btx_error("predict, score and gradient each take CHECKPOINT and DATA.csv"); }
+        btx_eval(btx_restore(args_at(a,1)),args_at(a,2),cmd); return;
+    }
     btx_error(text_concat("unknown command: ",cmd));
 }

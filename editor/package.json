@@ -1,0 +1,73 @@
+{
+  "name": "blyxtorch",
+  "displayName": "BlyxTorch",
+  "description": "Train and evaluate dense CPU networks in Blyx. Includes native trainers, editable machine-learning projects and editor snippets.",
+  "version": "0.2.0",
+  "publisher": "RahulChaube",
+  "license": "(MIT OR Apache-2.0)",
+  "icon": "logo.png",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Machine Learning",
+    "Snippets"
+  ],
+  "keywords": [
+    "blyx",
+    "blyxtorch",
+    "machine learning",
+    "neural networks",
+    "automatic differentiation",
+    "training",
+    "cpu"
+  ],
+  "homepage": "https://www.blyx-lang.space/packages/blyxtorch",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Rahulchaube1/blyxtorch.git",
+    "directory": "editor"
+  },
+  "bugs": {
+    "url": "https://github.com/Rahulchaube1/blyxtorch/issues"
+  },
+  "extensionKind": [
+    "workspace"
+  ],
+  "extensionDependencies": [
+    "RahulChaube.blyx-language"
+  ],
+  "contributes": {
+    "snippets": [
+      {
+        "language": "blyx",
+        "path": "./snippets/projects.json"
+      }
+    ],
+    "walkthroughs": [
+      {
+        "id": "blyxtorch.start",
+        "title": "Get started with BlyxTorch",
+        "description": "Run a calibration model, then train and evaluate a print-queue classifier.",
+        "steps": [
+          {
+            "id": "portable",
+            "title": "Fit your first sensor model",
+            "description": "Create a file ending in .blyx. Type bt-sensor, choose the completion and run Blyx: Run File.\n[Open the project guide](https://www.blyx-lang.space/packages/blyxtorch#projects)",
+            "media": {
+              "markdown": "walkthrough/sensor.md"
+            }
+          },
+          {
+            "id": "native",
+            "title": "Train and evaluate a classifier",
+            "description": "Extract the starter and open BlyxTorch.code-workspace. Choose Terminal → Run Task → BlyxTorch: Evaluate print queue.\n[Download both projects](https://github.com/Rahulchaube1/blyxtorch/releases/download/v0.2.0/blyxtorch-projects-0.2.0.zip)",
+            "media": {
+              "markdown": "walkthrough/queue.md"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

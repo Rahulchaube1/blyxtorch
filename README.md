@@ -2,9 +2,22 @@
 
 # BlyxTorch
 
+**Implementation language: [Blyx](https://www.blyx-lang.space/).**
+
 Train a small dense neural network, inspect its gradients, and ship it as a standalone CPU executable. BlyxTorch specializes the network shape ahead of time. Its differentiation rules, layer generator, losses, optimizers, checkpoint handling and command-line trainer are written in Blyx.
 
-**Version 0.1.1** runs on Windows x64, Linux x64 and Apple Silicon macOS. The native downloads include a ready-to-train binary classifier. Python and PyTorch are only used by the optional independent verification tools. [Download the release](https://github.com/Rahulchaube1/blyxtorch/releases/tag/v0.1.1) · [Handbook](https://doc.blyx-lang.space/guide/blyxtorch) · [Browser example](https://www.blyx-lang.space/play?example=package-blyxtorch)
+**Version 0.2.0** runs on Windows x64, Linux x64 and Apple Silicon macOS. The native downloads include a ready-to-train binary classifier. Python and PyTorch are only used by the optional independent verification tools. [Download the release](https://github.com/Rahulchaube1/blyxtorch/releases/tag/v0.2.0) · [Handbook](https://doc.blyx-lang.space/guide/blyxtorch) · [Browser example](https://www.blyx-lang.space/play?example=package-blyxtorch)
+
+## Use BlyxTorch in your editor
+
+Install **BlyxTorch** (publisher **RahulChaube**) or download the VSIX from the release. The extension bundles the three native trainers, two editable Blyx projects and a walkthrough. To run the first project, create `sensor.blyx`, type `bt-sensor`, accept the completion and choose **Blyx: Run File**. [Editor extension and downloads](https://www.blyx-lang.space/packages/blyxtorch#editor)
+
+| Project | What you can run |
+| --- | --- |
+| [Desk sensor calibration](projects/sensor-calibration.blyx) | Train a gain and offset using BlyxTorch automatic differentiation and predict two held-out readings. [Run in the browser](https://www.blyx-lang.space/play?example=blyxtorch-sensor) |
+| [Print-queue classifier](projects/queue-classifier.blyx) | Train a dense network on 16 synthetic print jobs, evaluate six held-out jobs and predict wait categories for four new jobs. [Run in the browser](https://www.blyx-lang.space/play?example=blyxtorch-queue) |
+
+The [project workspace](https://github.com/Rahulchaube1/blyxtorch/releases/download/v0.2.0/blyxtorch-projects-0.2.0.zip) includes the CSV files, trained weights and native editor tasks. [Project instructions](projects/README.md)
 
 ## Install with a package manager
 
@@ -76,6 +89,8 @@ Hidden activations are `tanh`, `relu` and `sigmoid`. A model with just input and
 | --- | --- |
 | `init [seed]` | Write deterministic initial weights to a checkpoint on standard output. |
 | `train DATA [epochs] [rate] [batch] [adam or sgd] [seed]` | Train from initialization. Defaults are 100 epochs, learning rate 0.03, batch size 32, Adam and seed 7. |
+| `train-score TRAIN.csv LABELLED.csv [epochs] [rate] [batch] [adam or sgd] [seed]` | Fit on the training rows and report mean loss on a separate file in one command. |
+| `train-predict TRAIN.csv FEATURES.csv [epochs] [rate] [batch] [adam or sgd] [seed]` | Fit and return a CSV of predictions for new feature rows. |
 | `predict CHECKPOINT FEATURES.csv` | Emit a CSV of predictions in input order. |
 | `score CHECKPOINT LABELLED.csv` | Return a JSON row count and mean loss. |
 | `gradient CHECKPOINT LABELLED.csv` | Return the loss and every parameter derivative separately for each observation. |
@@ -117,9 +132,9 @@ Within each layer, parameters are the output-by-input weight matrix in row-major
 
 ## Verification and performance
 
-The independent oracle compares predictions, per-row losses, parameter derivatives and entire multi-epoch SGD and Adam updates against CPU PyTorch in float64. Five networks cover the three objectives, all hidden activations, two hidden layers and a partial final mini-batch. The verifier also checks selected derivatives by central differences. [Verification source](verification/pytorch_reference.py) · [Recorded results](verification/parity.json) · [CI runs](https://github.com/Rahulchaube1/blyxtorch/actions)
+The independent oracle compares predictions, per-row losses, parameter derivatives and entire multi-epoch SGD and Adam updates against CPU PyTorch in float64. Five networks cover the three objectives, all hidden activations, two hidden layers and a partial final mini-batch. The verifier also checks selected derivatives by central differences. [Verification source](https://github.com/Rahulchaube1/blyxtorch-verification/blob/367b3d68ab6247a291c28149516dc7dfc295e322/pytorch_reference.py) · [Recorded results](verification/parity.json) · [CI runs](https://github.com/Rahulchaube1/blyxtorch/actions)
 
-On one Windows x64 CPU, scoring 4,096 CSV rows took 59.3 ms for a new BlyxTorch process, 3.52 s for a new Python process loading PyTorch, and 6.8 ms with PyTorch already loaded. These are medians of seven runs in rotating order. All three read the checkpoint and CSV, score the same small model and produce the same mean loss. The warm PyTorch path uses vectorized batches. GPU, larger models and training throughput need separate measurements. [Raw timings and environment](verification/score-benchmark.json) · [Benchmark harness](verification/bench_score.py)
+On one Windows x64 CPU, scoring 4,096 CSV rows took 59.3 ms for a new BlyxTorch process, 3.52 s for a new Python process loading PyTorch, and 6.8 ms with PyTorch already loaded. These are medians of seven runs in rotating order. All three read the checkpoint and CSV, score the same small model and produce the same mean loss. The warm PyTorch path uses vectorized batches. GPU, larger models and training throughput need separate measurements. [Raw timings and environment](verification/score-benchmark.json) · [Benchmark harness](https://github.com/Rahulchaube1/blyxtorch-verification/blob/367b3d68ab6247a291c28149516dc7dfc295e322/bench_score.py)
 
 ## Build and contribute
 
@@ -127,9 +142,8 @@ On one Windows x64 CPU, scoring 4,096 CSV rows took 59.3 ms for a new BlyxTorch 
 blyxc build main.blyx -o blyxtorch
 blyxc native-run tests.blyx
 blyxc native-run example.blyx
-python verification/test_cli.py --exe ./blyxtorch
 ```
 
-On Windows compile with `-o blyxtorch.exe`. The shipped default module can be reproduced from the repository root with `blyxc native-run generate.blyx -- 2,4,1 binary tanh`. CLI tests check it against the committed source. Developers with CPU PyTorch installed can run `python verification/pytorch_reference.py --exe ./blyxtorch`. Please include the model widths, input, expected output and command when reporting an issue. [Issues](https://github.com/Rahulchaube1/blyxtorch/issues) · [Blyx community](https://www.blyx-lang.space/community)
+On Windows compile with `-o blyxtorch.exe`. The shipped default module can be reproduced from the repository root with `blyxc native-run generate.blyx -- 2,4,1 binary tanh`. The [independent verification repository](https://github.com/Rahulchaube1/blyxtorch-verification) checks the installed binary, compares gradients and optimizer updates with CPU PyTorch, and records the scoring benchmark. Please include the model widths, input, expected output and command when reporting an issue. [Issues](https://github.com/Rahulchaube1/blyxtorch/issues) · [Blyx community](https://www.blyx-lang.space/community)
 
 BlyxTorch is an independent project by Rahul Chaube and contributors. It is distributed under your choice of the [MIT](LICENSE-MIT) or [Apache 2.0](LICENSE-APACHE) license.

@@ -1,0 +1,87 @@
+{
+  "folders": [
+    {
+      "path": "."
+    }
+  ],
+  "extensions": {
+    "recommendations": [
+      "RahulChaube.blyxtorch"
+    ]
+  },
+  "tasks": {
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "BlyxTorch: Evaluate print queue",
+        "type": "process",
+        "command": "${extensionInstallFolder:RahulChaube.blyxtorch}/native/linux-x64/blyxtorch",
+        "windows": {
+          "command": "${extensionInstallFolder:RahulChaube.blyxtorch}/native/windows-x64/blyxtorch.exe"
+        },
+        "osx": {
+          "command": "${extensionInstallFolder:RahulChaube.blyxtorch}/native/macos-arm64/blyxtorch"
+        },
+        "args": [
+          "train-score",
+          "print-queue/train.csv",
+          "print-queue/holdout.csv",
+          "180",
+          "0.03",
+          "4",
+          "adam",
+          "7"
+        ],
+        "options": {
+          "cwd": "${workspaceFolder}"
+        },
+        "problemMatcher": []
+      },
+      {
+        "label": "BlyxTorch: Predict new print jobs",
+        "type": "process",
+        "command": "${extensionInstallFolder:RahulChaube.blyxtorch}/native/linux-x64/blyxtorch",
+        "windows": {
+          "command": "${extensionInstallFolder:RahulChaube.blyxtorch}/native/windows-x64/blyxtorch.exe"
+        },
+        "osx": {
+          "command": "${extensionInstallFolder:RahulChaube.blyxtorch}/native/macos-arm64/blyxtorch"
+        },
+        "args": [
+          "train-predict",
+          "print-queue/train.csv",
+          "print-queue/new-jobs.csv",
+          "180",
+          "0.03",
+          "4",
+          "adam",
+          "7"
+        ],
+        "options": {
+          "cwd": "${workspaceFolder}"
+        },
+        "problemMatcher": []
+      },
+      {
+        "label": "BlyxTorch: Use saved queue weights",
+        "type": "process",
+        "command": "${extensionInstallFolder:RahulChaube.blyxtorch}/native/linux-x64/blyxtorch",
+        "windows": {
+          "command": "${extensionInstallFolder:RahulChaube.blyxtorch}/native/windows-x64/blyxtorch.exe"
+        },
+        "osx": {
+          "command": "${extensionInstallFolder:RahulChaube.blyxtorch}/native/macos-arm64/blyxtorch"
+        },
+        "args": [
+          "predict",
+          "print-queue/queue.bt",
+          "print-queue/new-jobs.csv"
+        ],
+        "options": {
+          "cwd": "${workspaceFolder}"
+        },
+        "problemMatcher": []
+      }
+    ]
+  }
+}

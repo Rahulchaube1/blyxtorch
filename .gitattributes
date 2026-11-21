@@ -2,3 +2,5 @@
 *.csv text eol=lf
 *.md text eol=lf
 *.png binary
+# Numerical model checkpoints are data.
+*.bt text eol=lf linguist-detectable=false

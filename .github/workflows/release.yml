@@ -14,6 +14,12 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: Rahulchaube1/blyxtorch-verification
+          ref: 367b3d68ab6247a291c28149516dc7dfc295e322
+          path: reference-tools
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v5
         with:
@@ -21,20 +27,25 @@ jobs:
       - run: cargo install --locked --version 0.2.1 blyxc
       - run: blyxc native-run tests.blyx
       - run: blyxc native-run example.blyx
+      - name: Run both portable projects
+        shell: bash
+        run: |
+          diff -u <(printf '18.625\n22.375\n') <(blyxc run projects/sensor-calibration.blyx | tr -d '\r')
+          diff -u <(printf 'short wait\nlong wait\nshort wait\nlong wait\n') <(blyxc run projects/queue-classifier.blyx | tr -d '\r')
       - name: Build in a clean installation directory
         shell: bash
         run: |
           mkdir -p build dist
           blyxc build main.blyx -o build/${{ matrix.file }}
           cp blyxtorch.blyx training.blyx build/
-      - run: python verification/test_cli.py --exe build/${{ matrix.file }}
+      - run: python reference-tools/test_cli.py --source . --exe build/${{ matrix.file }}
       - name: Verify the maximum supported parameter count
         if: runner.os == 'Linux'
-        run: python verification/test_cli.py --exe build/blyxtorch --largest
+        run: python reference-tools/test_cli.py --source . --exe build/blyxtorch --largest
       - name: Package the tested installation
         shell: bash
         run: |
-          cp -r fixtures assets README.md LICENSE-MIT LICENSE-APACHE build/
+          cp -r fixtures assets projects README.md LICENSE-MIT LICENSE-APACHE build/
           cd build
           if [[ "${{ runner.os }}" == "Windows" ]]; then
             7z a "../dist/blyxtorch-${{ matrix.target }}.zip" *
@@ -49,6 +60,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: Rahulchaube1/blyxtorch-verification
+          ref: 367b3d68ab6247a291c28149516dc7dfc295e322
+          path: reference-tools
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v5
         with:
@@ -56,10 +73,62 @@ jobs:
       - run: cargo install --locked --version 0.2.1 blyxc
       - run: python -m pip install --index-url https://download.pytorch.org/whl/cpu torch==2.8.0
       - run: blyxc build main.blyx -o blyxtorch
-      - run: python verification/pytorch_reference.py --exe ./blyxtorch
+      - run: python reference-tools/pytorch_reference.py --exe ./blyxtorch
+  editor:
+    needs: native
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: blyxtorch-*
+          path: dist
+          merge-multiple: true
+      - name: Package the universal VSIX and editable starter
+        shell: bash
+        run: |
+          set -eu
+          version=$(jq -r .version editor/package.json)
+          stage="$RUNNER_TEMP/blyxtorch-extension"
+          mkdir -p "$stage/snippets" output
+          cp -r editor/. "$stage/"
+          cp assets/logo.png "$stage/logo.png"
+          cat LICENSE-MIT LICENSE-APACHE > "$stage/LICENSE.txt"
+          cp -r projects "$stage/projects"
+          for platform in linux-x64 macos-arm64 windows-x64; do
+            dest="$stage/native/$platform"
+            mkdir -p "$dest"
+            if [[ "$platform" == windows-x64 ]]; then
+              unzip -q dist/blyxtorch-windows-x64.zip blyxtorch.exe blyxtorch.blyx training.blyx -d "$dest"
+            else
+              tar -xzf "dist/blyxtorch-$platform.tar.gz" -C "$dest" blyxtorch blyxtorch.blyx training.blyx
+              chmod 755 "$dest/blyxtorch"
+            fi
+          done
+          jq -n --rawfile sensor projects/sensor-calibration.blyx --rawfile queue projects/queue-classifier.blyx '
+            def template($prefix; $text): {prefix: $prefix, isFileTemplate: true, body: ($text | rtrimstr("\n") | split("\n"))};
+            {"BlyxTorch: Fit a desk sensor": template("bt-sensor"; $sensor),
+             "BlyxTorch: Classify print jobs": template("bt-queue"; $queue)}
+          ' > "$stage/snippets/projects.json"
+          (cd projects && zip -qr "../output/blyxtorch-projects-$version.zip" .)
+          (cd "$stage" && npx --yes @vscode/vsce@4.1.1 package --no-dependencies --allow-missing-repository --out "$GITHUB_WORKSPACE/output/blyxtorch-$version.vsix")
+          unpack="$RUNNER_TEMP/blyxtorch-installed"
+          unzip -q "output/blyxtorch-$version.vsix" -d "$unpack"
+          cmp assets/logo.png "$unpack/extension/logo.png"
+          native="$unpack/extension/native/linux-x64/blyxtorch"
+          test -x "$native" && test -x "$unpack/extension/native/macos-arm64/blyxtorch"
+          test "$("$native" --version)" = "BlyxTorch $version"
+          "$native" train-score projects/print-queue/train.csv projects/print-queue/holdout.csv 180 0.03 4 adam 7 | jq -e '.rows == 6 and .mean_loss < 0.01'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: blyxtorch-editor
+          path: output/*
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [native, reference]
+    needs: [native, reference, editor]
     permissions:
       contents: write
     runs-on: ubuntu-latest
@@ -68,13 +137,13 @@ jobs:
         with:
           path: dist
           merge-multiple: true
-      - run: cd dist && sha256sum *.zip *.tar.gz > SHA256SUMS
+      - run: cd dist && sha256sum *.zip *.tar.gz *.vsix > SHA256SUMS
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*
           body: |
-            <img src="https://raw.githubusercontent.com/Rahulchaube1/blyxtorch/v0.1.1/assets/logo.png" width="88" alt="BlyxTorch bird logo">
+            <img src="https://raw.githubusercontent.com/Rahulchaube1/blyxtorch/v0.2.0/assets/logo.png" width="88" alt="BlyxTorch bird logo">
 
-            This release adopts the blue bird as the BlyxTorch logo. All three native downloads include the original PNG at `assets/logo.png`.
+            Install the BlyxTorch VSIX in VS Code or an Open VSX client, or download the native CLI for your platform. The projects ZIP includes a desk sensor calibration program, a trained print-queue classifier and editor tasks for training on your own CSVs.
 
-            Extract the archive for your platform and follow the [BlyxTorch tutorial](https://doc.blyx-lang.space/guide/blyxtorch) to train the bundled XOR classifier. SHA256SUMS lists the checksum for each download.
+            The new `train-score` and `train-predict` commands train and evaluate in one process. The trainer, generated models and example programs are written in Blyx. [Project guide](https://www.blyx-lang.space/packages/blyxtorch#projects) · [Handbook](https://doc.blyx-lang.space/guide/blyxtorch)
