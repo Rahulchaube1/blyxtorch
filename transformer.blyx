@@ -1,0 +1,96 @@
+use std::buffer;
+use attention;
+use tensor_ops;
+use blyxtorch;
+
+// Layout: Q, K, V, output, feed-forward up, feed-forward down, LN1, LN2.
+pub fn bt_transformer_count(width: i64, hidden: i64) -> i64 {
+    let projections = bt_size(4,bt_affine_count(width,width));
+    let feed = bt_total(bt_affine_count(width,hidden),bt_affine_count(hidden,width));
+    bt_total(bt_total(projections,feed),bt_size(4,width))
+}
+pub fn bt_transformer_init(width: i64, hidden: i64, seed: i64) -> vector {
+    let count = bt_transformer_count(width,hidden);
+    let mut p = buffer_fill(count,0.0);
+    let mut state = 1 + ((seed % 2147483646) + 2147483646) % 2147483646;
+    let mut base = 0;
+    let mut layer = 0;
+    while layer < 6 {
+        let mut inputs = width;
+        let mut outputs = width;
+        if layer == 4 { outputs = hidden; }
+        if layer == 5 { inputs = hidden; }
+        let bound = btx_sqrt(6.0/(bt_as_float(inputs)+bt_as_float(outputs)));
+        let mut i = 0;
+        while i < inputs*outputs {
+            state = (state*48271) % 2147483647;
+            p = buffer_set(p,base+i,bound*(2.0*bt_as_float(state)/2147483647.0-1.0));
+            i += 1;
+        }
+        base += bt_affine_count(inputs,outputs);
+        layer += 1;
+    }
+    let mut c = 0;
+    while c < width {
+        p = buffer_set(p,base+c,1.0);
+        p = buffer_set(p,base+2*width+c,1.0);
+        c += 1;
+    }
+    p
+}
+fn block(x: vector, tokens: i64, width: i64, heads: i64, hidden: i64, causal: bool, p: vector, dy: vector, backward: bool) -> vector {
+    let count = bt_transformer_count(width,hidden);
+    let n = bt_size(tokens,width);
+    bt_require(len(x) == n && tokens > 0 && len(p) == count && (!backward || len(dy) == n), "transformer block shape mismatch");
+    bt_require(heads > 0 && width % heads == 0, "invalid transformer head count");
+    let proj = bt_affine_count(width,width);
+    let up = bt_affine_count(width,hidden);
+    let down = bt_affine_count(hidden,width);
+    let qparams = bt_slice(p,0,proj);
+    let kparams = bt_slice(p,proj,proj);
+    let vparams = bt_slice(p,2*proj,proj);
+    let oparams = bt_slice(p,3*proj,proj);
+    let up_params = bt_slice(p,4*proj,up);
+    let down_params = bt_slice(p,4*proj+up,down);
+    let norm1 = bt_slice(p,count-4*width,2*width);
+    let norm2 = bt_slice(p,count-2*width,2*width);
+    let z = bt_layer_norm(x,tokens,width,norm1);
+    let q = bt_affine(z,tokens,width,width,qparams);
+    let k = bt_affine(z,tokens,width,width,kparams);
+    let v = bt_affine(z,tokens,width,width,vparams);
+    let a = bt_attention(q,k,v,tokens,width,heads,causal);
+    let residual = bt_add_vectors(x,bt_affine(a,tokens,width,width,oparams));
+    let u = bt_layer_norm(residual,tokens,width,norm2);
+    let h = bt_affine(u,tokens,width,hidden,up_params);
+    let mut activated = h;
+    let mut i = 0;
+    while i < len(h) { activated = buffer_set(activated,i,btx_relu_value(at(h,i))); i += 1; }
+    if !backward { return bt_add_vectors(residual,bt_affine(activated,tokens,hidden,width,down_params)); }
+
+    let gdown = bt_affine_backward(activated,tokens,hidden,width,down_params,dy);
+    let mut dh = bt_slice(gdown,0,len(h));
+    i = 0;
+    while i < len(h) { if at(h,i) <= 0.0 { dh = buffer_set(dh,i,0.0); } i += 1; }
+    let gup = bt_affine_backward(u,tokens,width,hidden,up_params,dh);
+    let gn2 = bt_layer_norm_backward(residual,tokens,width,norm2,bt_slice(gup,0,n));
+    let dr = bt_add_vectors(dy,bt_slice(gn2,0,n));
+    let go = bt_affine_backward(a,tokens,width,width,oparams,dr);
+    let ga = bt_attention_backward(q,k,v,tokens,width,heads,causal,bt_slice(go,0,n));
+    let gq = bt_affine_backward(z,tokens,width,width,qparams,bt_slice(ga,0,n));
+    let gk = bt_affine_backward(z,tokens,width,width,kparams,bt_slice(ga,n,n));
+    let gv = bt_affine_backward(z,tokens,width,width,vparams,bt_slice(ga,2*n,n));
+    let dz = bt_add_vectors(bt_add_vectors(bt_slice(gq,0,n),bt_slice(gk,0,n)),bt_slice(gv,0,n));
+    let gn1 = bt_layer_norm_backward(x,tokens,width,norm1,dz);
+    let dx = bt_add_vectors(dr,bt_slice(gn1,0,n));
+    let dqk = bt_join(bt_slice(gq,n,proj),bt_slice(gk,n,proj));
+    let dvo = bt_join(bt_slice(gv,n,proj),bt_slice(go,n,proj));
+    let dff = bt_join(bt_slice(gup,n,up),bt_slice(gdown,len(h),down));
+    let dnorm = bt_join(bt_slice(gn1,n,2*width),bt_slice(gn2,n,2*width));
+    bt_join(dx,bt_join(bt_join(dqk,dvo),bt_join(dff,dnorm)))
+}
+pub fn bt_transformer(x: vector, tokens: i64, width: i64, heads: i64, hidden: i64, causal: bool, p: vector) -> vector {
+    block(x,tokens,width,heads,hidden,causal,p,[],false)
+}
+pub fn bt_transformer_backward(x: vector, tokens: i64, width: i64, heads: i64, hidden: i64, causal: bool, p: vector, dy: vector) -> vector {
+    block(x,tokens,width,heads,hidden,causal,p,dy,true)
+}

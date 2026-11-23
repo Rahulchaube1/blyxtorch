@@ -1,0 +1,65 @@
+use std::cli;
+use std::buffer;
+use tensor_ops;
+use convolution;
+use transformer;
+use attention;
+use embedding;
+
+fn pattern(n: i64, seed: i64) -> vector {
+    let mut out = buffer_fill(n,0.0);
+    let mut i = 0;
+    while i < n {
+        out = buffer_set(out,i,bt_as_float((17*i+7*seed)%43-21)/13.0);
+        i += 1;
+    }
+    out
+}
+fn probe() {
+    let x1 = pattern(10,1);
+    let p1 = pattern(bt_conv_count(1,3,2,3),2);
+    let y1 = bt_conv1d(x1,5,2,3,3,2,1,p1);
+    println!(y1);
+    println!(bt_conv1d_backward(x1,5,2,3,3,2,1,p1,pattern(len(y1),3)));
+    let x2 = pattern(40,4);
+    let p2 = pattern(bt_conv_count(2,3,2,3),5);
+    let y2 = bt_conv2d(x2,4,5,2,3,2,3,2,1,p2);
+    println!(y2);
+    println!(bt_conv2d_backward(x2,4,5,2,3,2,3,2,1,p2,pattern(len(y2),6)));
+    let x = pattern(12,7);
+    let p = bt_transformer_init(4,7,11);
+    println!(p);
+    println!(bt_transformer(x,3,4,2,7,true,p));
+    println!(bt_transformer_backward(x,3,4,2,7,true,p,pattern(12,8)));
+    println!(bt_transformer(x,3,4,2,7,false,p));
+    println!(bt_transformer_backward(x,3,4,2,7,false,p,pattern(12,8)));
+}
+fn main() {
+    let args = cli_args();
+    if args_len(args) == 1 && args_at(args,0) == "--probe" { probe(); return; }
+    let p = bt_transformer_init(64,192,17);
+    let x = pattern(4*64,5);
+    let y = bt_transformer(x,4,64,8,192,true,p);
+    let g = bt_transformer_backward(x,4,64,8,192,true,p,y);
+    let next = bt_sgd_step(p,bt_slice(g,len(x),len(p)),0.0001);
+    let trained = bt_transformer(x,4,64,8,192,true,next);
+    bt_require(dot(trained,trained) < dot(y,y), "dense transformer update failed");
+    print!("dense trainable parameters: "); println!(len(p));
+    print!("dense loss before: "); println!(dot(y,y)/512.0);
+    print!("dense loss after: "); println!(dot(trained,trained)/512.0);
+    let changed = buffer_set(x,255,100.0);
+    let masked = bt_transformer(changed,4,64,8,192,true,p);
+    bt_require(bt_slice(y,0,192) == bt_slice(masked,0,192), "causal output depends on future token");
+    let weights = [1,0,-1,0];
+    bt_require(bt_conv1d([2,3,5,7],4,1,1,3,1,0,weights) == [-3,-4], "shared filter output mismatch");
+    let stable = bt_attention([100,0,0,100],[100,0,0,100],[1,2,3,4],2,2,1,false);
+    bt_require(stable == [1,2,3,4], "softmax overflow");
+    let rows = 9007199254740995;
+    let id = 9007199254740993;
+    let mut table = bt_embedding_sgd([],rows,4,id,[2,4,6,8],0.5);
+    table = bt_embedding_sgd(table,rows,4,id-1,[8,6,4,2],0.5);
+    bt_require(len(table) == 12 && bt_embedding_lookup(table,rows,4,id) == [-1,-2,-3,-4], "large embedding row collision");
+    bt_require(bt_embedding_lookup(table,rows,4,id-1) == [-4,-3,-2,-1], "adjacent embedding row collision");
+    bt_require(bt_embedding_lookup(table,rows,4,id+1) == [0,0,0,0], "unseen row must be zero");
+    print!("sparse logical parameters: "); println!(bt_embedding_count(rows,4));
+}

@@ -1,0 +1,44 @@
+use std::buffer;
+use tensor_ops;
+use blyxtorch;
+
+// Unseen embeddings are zero. Each materialized row stores two exact integer
+// limbs and width f64 values. A single f64 cannot hold every i64 row ID.
+pub fn bt_embedding_count(rows: i64, width: i64) -> i64 {
+    bt_require(rows > 0 && width > 0, "embedding dimensions must be positive");
+    bt_size(rows,width)
+}
+pub fn bt_embedding_find(table: vector, rows: i64, width: i64, id: i64) -> i64 {
+    bt_embedding_count(rows,width);
+    let stride = bt_total(width,2);
+    bt_require(id >= 0 && id < rows && len(table) % stride == 0, "invalid embedding row or table");
+    let hi = bt_as_float(id / 1000000000);
+    let lo = bt_as_float(id % 1000000000);
+    let mut start = 0;
+    while start < len(table) {
+        if at(table,start) == hi && at(table,start+1) == lo { return start; }
+        start += stride;
+    }
+    return -1;
+}
+pub fn bt_embedding_lookup(table: vector, rows: i64, width: i64, id: i64) -> vector {
+    let start = bt_embedding_find(table,rows,width,id);
+    if start < 0 { return buffer_fill(width,0.0); }
+    bt_slice(table,start+2,width)
+}
+pub fn bt_embedding_put(table: vector, rows: i64, width: i64, id: i64, values: vector) -> vector {
+    bt_require(btx_valid(values,width), "invalid embedding values");
+    let start = bt_embedding_find(table,rows,width,id);
+    if start < 0 {
+        let key = [id / 1000000000,id % 1000000000];
+        return bt_join(table,bt_join(key,values));
+    }
+    let mut updated = table;
+    let mut c = 0;
+    while c < width { updated = buffer_set(updated,start+2+c,at(values,c)); c += 1; }
+    updated
+}
+pub fn bt_embedding_sgd(table: vector, rows: i64, width: i64, id: i64, gradient: vector, rate: f64) -> vector {
+    let current = bt_embedding_lookup(table,rows,width,id);
+    bt_embedding_put(table,rows,width,id,bt_sgd_step(current,gradient,rate))
+}

@@ -1,0 +1,100 @@
+// CPU f64 tensors use flat, row-major storage. All public shapes use i64.
+use std::buffer;
+use std::cli;
+use blyxtorch;
+
+pub fn bt_require(ok: bool, message: String) {
+    if !ok { stderr_line(message); process_exit(2); }
+}
+pub fn bt_size(a: i64, b: i64) -> i64 {
+    bt_require(a >= 0 && b >= 0, "negative tensor extent");
+    if a == 0 { return 0; }
+    bt_require(b <= 9223372036854775807 / a, "tensor size exceeds i64");
+    a * b
+}
+pub fn bt_total(a: i64, b: i64) -> i64 {
+    bt_require(a >= 0 && b >= 0 && b <= 9223372036854775807 - a, "tensor size exceeds i64");
+    a + b
+}
+pub fn bt_as_float(i: i64) -> f64 { at([i], 0) }
+pub fn bt_slice(x: vector, start: i64, count: i64) -> vector {
+    bt_require(start >= 0 && count >= 0 && start <= len(x) && count <= len(x)-start, "invalid tensor slice");
+    let mut y = buffer_fill(count, 0.0);
+    let mut i = 0;
+    while i < count { y = buffer_set(y, i, at(x, start+i)); i += 1; }
+    y
+}
+pub fn bt_join(a: vector, b: vector) -> vector {
+    let mut y = buffer_fill(bt_total(len(a),len(b)), 0.0);
+    let mut i = 0;
+    while i < len(a) { y = buffer_set(y,i,at(a,i)); i += 1; }
+    let mut j = 0;
+    while j < len(b) { y = buffer_set(y,i+j,at(b,j)); j += 1; }
+    y
+}
+pub fn bt_add_vectors(a: vector, b: vector) -> vector {
+    bt_require(len(a) == len(b), "tensor addition shape mismatch");
+    let mut y = a;
+    let mut i = 0;
+    while i < len(y) { y = buffer_set(y,i,at(y,i)+at(b,i)); i += 1; }
+    y
+}
+pub fn bt_sgd_step(parameters: vector, gradient: vector, rate: f64) -> vector {
+    bt_require(len(parameters) == len(gradient) && btx_finite(rate) && rate > 0.0, "invalid SGD step");
+    let mut y = parameters;
+    let mut i = 0;
+    while i < len(y) {
+        let updated = at(y,i) - rate*at(gradient,i);
+        bt_require(btx_finite(updated), "non-finite SGD update");
+        y = buffer_set(y,i,updated);
+        i += 1;
+    }
+    y
+}
+
+// A matrix of outputs-by-inputs followed by one bias per output.
+pub fn bt_affine_count(inputs: i64, outputs: i64) -> i64 {
+    bt_require(inputs > 0 && outputs > 0, "affine widths must be positive");
+    bt_total(bt_size(inputs,outputs),outputs)
+}
+pub fn bt_affine(x: vector, rows: i64, inputs: i64, outputs: i64, p: vector) -> vector {
+    bt_require(len(p) == bt_affine_count(inputs,outputs) && rows > 0 && len(x) == bt_size(rows,inputs), "affine shape mismatch");
+    let mut y = buffer_fill(bt_size(rows,outputs),0.0);
+    let mut r = 0;
+    while r < rows {
+        let mut o = 0;
+        while o < outputs {
+            let mut z = at(p,outputs*inputs+o);
+            let mut i = 0;
+            while i < inputs { z += at(x,r*inputs+i)*at(p,o*inputs+i); i += 1; }
+            y = buffer_set(y,r*outputs+o,z);
+            o += 1;
+        }
+        r += 1;
+    }
+    y
+}
+pub fn bt_affine_backward(x: vector, rows: i64, inputs: i64, outputs: i64, p: vector, dy: vector) -> vector {
+    bt_require(len(p) == bt_affine_count(inputs,outputs) && rows > 0 && len(x) == bt_size(rows,inputs) && len(dy) == bt_size(rows,outputs), "affine gradient shape mismatch");
+    let mut g = buffer_fill(bt_total(len(x),len(p)),0.0);
+    let mut r = 0;
+    while r < rows {
+        let mut o = 0;
+        while o < outputs {
+            let delta = at(dy,r*outputs+o);
+            let bias = len(x)+inputs*outputs+o;
+            g = buffer_set(g,bias,at(g,bias)+delta);
+            let mut i = 0;
+            while i < inputs {
+                let src = r*inputs+i;
+                let weight = o*inputs+i;
+                g = buffer_set(g,src,at(g,src)+delta*at(p,weight));
+                g = buffer_set(g,len(x)+weight,at(g,len(x)+weight)+delta*at(x,src));
+                i += 1;
+            }
+            o += 1;
+        }
+        r += 1;
+    }
+    g
+}

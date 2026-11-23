@@ -4,9 +4,9 @@
 
 **Implementation language: [Blyx](https://www.blyx-lang.space/).**
 
-Train a small dense neural network, inspect its gradients, and ship it as a standalone CPU executable. BlyxTorch specializes the network shape ahead of time. Its differentiation rules, layer generator, losses, optimizers, checkpoint handling and command-line trainer are written in Blyx.
+Train a convolution on a signal, fit a causal transformer to a sequence, or update sparse embeddings by row ID. BlyxTorch's CPU f64 layer implementations, gradients and training examples are written in Blyx. The original dense-network generator is also available for standalone classifiers and regressors.
 
-**Version 0.2.0** runs on Windows x64, Linux x64 and Apple Silicon macOS. The native downloads include a ready-to-train binary classifier. Python and PyTorch are only used by the optional independent verification tools. [Download the release](https://github.com/Rahulchaube1/blyxtorch/releases/tag/v0.2.0) · [Handbook](https://doc.blyx-lang.space/guide/blyxtorch) · [Browser example](https://www.blyx-lang.space/play?example=package-blyxtorch)
+**Version 0.3.0** adds native CPU layers. Run `blyxtorch layer-demo` to train a shared filter and a transformer block. The sequence example trains on 64 synthetic sensor streams and measures its prediction error on 16 held-out streams. [Download the releases](https://github.com/Rahulchaube1/blyxtorch/releases) · [Layer guide](LAYERS.md) · [Sequence example](sequence_example.blyx) · [Browser example for the portable dense API](https://www.blyx-lang.space/play?example=package-blyxtorch)
 
 ## Use BlyxTorch in your editor
 
@@ -81,7 +81,7 @@ In PowerShell, pipe `.\blyxtorch.exe emit 2,8,4,3 softmax relu` to `Out-File -En
 | `binary` | One `y0` from 0 through 1 | Probability from a single output logit. Training uses stable binary cross-entropy with logits. |
 | `softmax` | One integer `class` from 0 through output width minus one | A probability per class. Training uses log-sum-exp categorical cross-entropy. |
 
-Hidden activations are `tanh`, `relu` and `sigmoid`. A model with just input and output widths is an affine model. The release accepts up to eight affine layers, widths from 1 through 64 and up to 1,024 trainable parameters in total. Shapes are fixed at generation. Computation uses CPU float64. GPU execution, arbitrary-rank tensors, convolution and transformer layers are outside this release.
+Hidden activations are `tanh`, `relu` and `sigmoid`. A model with just input and output widths is an affine model. The `emit` command specializes up to eight affine layers, widths from 1 through 64 and up to 1,024 trainable parameters. The native layer API accepts runtime shapes. Its tests train a 41,728-parameter dense transformer block and exercise sparse embedding row IDs above 2⁵³. [Native layers and limits](LAYERS.md)
 
 ## Commands and data
 
@@ -139,9 +139,11 @@ On one Windows x64 CPU, scoring 4,096 CSV rows took 59.3 ms for a new BlyxTorch 
 ## Build and contribute
 
 ```sh
+cargo install --locked --git https://github.com/Rahulchaube1/blyxxxx --rev 120d6b6ec6df09ff018d7c18752fb3297b5e629d blyxc
 blyxc build main.blyx -o blyxtorch
 blyxc native-run tests.blyx
 blyxc native-run example.blyx
+blyxc native-run sequence_example.blyx
 ```
 
 On Windows compile with `-o blyxtorch.exe`. The shipped default module can be reproduced from the repository root with `blyxc native-run generate.blyx -- 2,4,1 binary tanh`. The [independent verification repository](https://github.com/Rahulchaube1/blyxtorch-verification) checks the installed binary, compares gradients and optimizer updates with CPU PyTorch, and records the scoring benchmark. Please include the model widths, input, expected output and command when reporting an issue. [Issues](https://github.com/Rahulchaube1/blyxtorch/issues) · [Blyx community](https://www.blyx-lang.space/community)

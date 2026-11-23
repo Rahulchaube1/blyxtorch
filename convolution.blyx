@@ -1,0 +1,82 @@
+use std::buffer;
+use tensor_ops;
+
+pub fn bt_conv_count(kh: i64, kw: i64, inputs: i64, outputs: i64) -> i64 {
+    bt_require(kh > 0 && kw > 0 && inputs > 0 && outputs > 0, "convolution dimensions must be positive");
+    bt_affine_count(bt_size(bt_size(kh,kw),inputs),outputs)
+}
+pub fn bt_conv_extent(input: i64, kernel: i64, stride: i64, pad: i64) -> i64 {
+    bt_require(input > 0 && kernel > 0 && stride > 0 && pad >= 0, "invalid convolution extent");
+    let padded = bt_total(input,bt_size(2,pad));
+    bt_require(padded >= kernel, "convolution kernel exceeds padded input");
+    (padded-kernel)/stride + 1
+}
+
+// Channels last. W[out,ky,kx,in] is followed by bias[out].
+fn convolve(x: vector, h: i64, w: i64, inputs: i64, outputs: i64, kh: i64, kw: i64, sy: i64, sx: i64, py: i64, px: i64, p: vector, dy: vector, backward: bool) -> vector {
+    let count = bt_conv_count(kh,kw,inputs,outputs);
+    let oh = bt_conv_extent(h,kh,sy,py);
+    let ow = bt_conv_extent(w,kw,sx,px);
+    let out_size = bt_size(bt_size(oh,ow),outputs);
+    bt_require(len(x) == bt_size(bt_size(h,w),inputs) && len(p) == count, "convolution input or parameters have the wrong shape");
+    bt_require(!backward || len(dy) == out_size, "convolution output gradient has the wrong shape");
+    let mut size = out_size;
+    if backward { size = bt_total(len(x),count); }
+    let mut result = buffer_fill(size,0.0);
+    let mut oy = 0;
+    while oy < oh {
+        let mut ox = 0;
+        while ox < ow {
+            let mut o = 0;
+            while o < outputs {
+                let out_id = (oy*ow+ox)*outputs+o;
+                let bias = count-outputs+o;
+                let mut value = at(p,bias);
+                let mut delta = 0.0;
+                if backward {
+                    delta = at(dy,out_id);
+                    result = buffer_set(result,len(x)+bias,at(result,len(x)+bias)+delta);
+                }
+                let mut ky = 0;
+                while ky < kh {
+                    let iy = oy*sy+ky-py;
+                    let mut kx = 0;
+                    while kx < kw {
+                        let ix = ox*sx+kx-px;
+                        if iy >= 0 && iy < h && ix >= 0 && ix < w {
+                            let mut c = 0;
+                            while c < inputs {
+                                let src = (iy*w+ix)*inputs+c;
+                                let weight = ((o*kh+ky)*kw+kx)*inputs+c;
+                                if backward {
+                                    result = buffer_set(result,src,at(result,src)+delta*at(p,weight));
+                                    result = buffer_set(result,len(x)+weight,at(result,len(x)+weight)+delta*at(x,src));
+                                } else { value += at(x,src)*at(p,weight); }
+                                c += 1;
+                            }
+                        }
+                        kx += 1;
+                    }
+                    ky += 1;
+                }
+                if !backward { result = buffer_set(result,out_id,value); }
+                o += 1;
+            }
+            ox += 1;
+        }
+        oy += 1;
+    }
+    result
+}
+pub fn bt_conv1d(x: vector, steps: i64, inputs: i64, outputs: i64, kernel: i64, stride: i64, pad: i64, p: vector) -> vector {
+    convolve(x,1,steps,inputs,outputs,1,kernel,1,stride,0,pad,p,[],false)
+}
+pub fn bt_conv1d_backward(x: vector, steps: i64, inputs: i64, outputs: i64, kernel: i64, stride: i64, pad: i64, p: vector, dy: vector) -> vector {
+    convolve(x,1,steps,inputs,outputs,1,kernel,1,stride,0,pad,p,dy,true)
+}
+pub fn bt_conv2d(x: vector, h: i64, w: i64, inputs: i64, outputs: i64, kh: i64, kw: i64, stride: i64, pad: i64, p: vector) -> vector {
+    convolve(x,h,w,inputs,outputs,kh,kw,stride,stride,pad,pad,p,[],false)
+}
+pub fn bt_conv2d_backward(x: vector, h: i64, w: i64, inputs: i64, outputs: i64, kh: i64, kw: i64, stride: i64, pad: i64, p: vector, dy: vector) -> vector {
+    convolve(x,h,w,inputs,outputs,kh,kw,stride,stride,pad,pad,p,dy,true)
+}

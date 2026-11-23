@@ -1,6 +1,6 @@
 # BlyxTorch
 
-Train and evaluate a dense CPU neural network from VS Code. The extension ships the BlyxTorch 0.2.0 native executables, their Blyx source templates and two editable projects. It installs the Blyx Language extension for syntax highlighting and **Blyx: Run File**.
+Train a CPU neural network from VS Code. The extension ships the BlyxTorch 0.3.0 native executables, their dense model templates and two editable projects. The CLI also includes a convolution and transformer training demo and sparse embedding checkpoints. The Blyx Language dependency provides highlighting and **Blyx: Run File**. [Native layer guide](https://github.com/Rahulchaube1/blyxtorch/blob/v0.3.0/LAYERS.md)
 
 ## Run a project in the editor
 
@@ -18,4 +18,4 @@ The native tasks support Windows x64, Linux x64 and macOS arm64. The portable si
 
 ## Install without a marketplace connection
 
-Download the Blyx Language VSIX and BlyxTorch VSIX on a connected machine. On the target desktop choose **Extensions: Install from VSIX** for Blyx Language first, followed by BlyxTorch. The trainer runs locally. [Blyx Language VSIX](https://github.com/Rahulchaube1/blyxxxx/releases/download/editor-v1.2.3/blyx-language-1.2.3.vsix) · [BlyxTorch VSIX](https://github.com/Rahulchaube1/blyxxxx/releases/download/framework-editors-v0.1.0/blyxtorch-0.2.1.vsix)
+Download the Blyx Language VSIX and BlyxTorch VSIX on a connected machine. On the target desktop choose **Extensions: Install from VSIX** for Blyx Language first, followed by BlyxTorch. The trainer runs locally. [Blyx Language VSIX](https://github.com/Rahulchaube1/blyxxxx/releases/download/editor-v1.2.4/blyx-language-1.2.4.vsix) · [BlyxTorch release downloads](https://github.com/Rahulchaube1/blyxtorch/releases/tag/v0.3.0)

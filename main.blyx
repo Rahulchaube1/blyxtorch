@@ -1,8 +1,10 @@
 use std::cli;
 use emit;
 use default_model;
+use layer_cli;
 fn main() {
     let args=cli_args();
+    if bt_layer_command(args) { return; }
     if args_len(args)>0 && args_at(args,0)=="emit" {
         if args_len(args)!=4 {
             stderr_line("usage: blyxtorch emit widths mse|binary|softmax tanh|relu|sigmoid");
@@ -13,6 +15,8 @@ fn main() {
     if args_len(args)==0 || args_at(args,0)=="--help" || args_at(args,0)=="help" {
         println!("blyxtorch emit WIDTHS mse|binary|softmax tanh|relu|sigmoid > model.blyx");
         println!("The bundled model has two inputs, four hidden units and one binary output.");
+        println!("blyxtorch layer-demo | embedding-init ROWS WIDTH | embedding-get FILE ROW | embedding-step FILE ROW RATE GRADIENT_CSV");
+        println!("blyxtorch transformer-plan LAYERS WIDTH HEADS FEED_FORWARD VOCAB");
     }
     bt_command(args);
 }

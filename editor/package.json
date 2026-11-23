@@ -1,8 +1,8 @@
 {
   "name": "blyxtorch",
   "displayName": "BlyxTorch",
-  "description": "Train and evaluate dense CPU networks in Blyx. Includes native trainers, editable machine-learning projects and editor snippets.",
-  "version": "0.2.1",
+  "description": "Train CPU networks in Blyx with convolution, multi-head attention, transformer blocks and sparse embeddings. Includes native trainers and editable projects.",
+  "version": "0.3.0",
   "publisher": "RahulChaube",
   "license": "(MIT OR Apache-2.0)",
   "icon": "logo.png",

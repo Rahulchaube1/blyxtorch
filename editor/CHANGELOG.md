@@ -1,5 +1,9 @@
 # Changes
 
+## 0.3.0
+
+The native trainer now includes a convolution and transformer training demo, a parameter planner and sparse embedding checkpoint commands.
+
 ## 0.2.1
 
 Updated the blue-crested BlyxTorch bird for the editor and framework gallery.

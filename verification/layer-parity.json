@@ -1,0 +1,38 @@
+{
+  "reference": "PyTorch 2.12.1+cpu",
+  "dtype": "float64",
+  "checks": {
+    "conv1d_forward": {
+      "values": 9,
+      "max_abs": 4.440892098500626e-16
+    },
+    "conv1d_backward": {
+      "values": 31,
+      "max_abs": 2.220446049250313e-16
+    },
+    "conv2d_forward": {
+      "values": 27,
+      "max_abs": 8.881784197001252e-16
+    },
+    "conv2d_backward": {
+      "values": 79,
+      "max_abs": 4.440892098500626e-16
+    },
+    "causal_forward": {
+      "values": 12,
+      "max_abs": 2.220446049250313e-16
+    },
+    "causal_backward": {
+      "values": 175,
+      "max_abs": 1.5543122344752192e-15
+    },
+    "bidirectional_forward": {
+      "values": 12,
+      "max_abs": 6.661338147750939e-16
+    },
+    "bidirectional_backward": {
+      "values": 175,
+      "max_abs": 1.4432899320127035e-15
+    }
+  }
+}

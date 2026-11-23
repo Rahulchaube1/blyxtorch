@@ -1,0 +1,57 @@
+// Learn the running mean of a sensor stream using only readings up to each time.
+use std::buffer;
+use tensor_ops;
+use transformer;
+
+fn readings(seed: i64) -> vector {
+    let mut x = buffer_fill(16,0.0);
+    let mut state = (seed+83)*17389;
+    let mut t = 0;
+    while t < 4 {
+        state = (state*48271)%2147483647;
+        x = buffer_set(x,t*4,bt_as_float(state%201-100)/100.0);
+        x = buffer_set(x,t*4+1,bt_as_float(t)/3.0);
+        x = buffer_set(x,t*4+2,1.0);
+        x = buffer_set(x,t*4+3,-1.0);
+        t += 1;
+    }
+    x
+}
+fn errors(x: vector, y: vector) -> vector {
+    let mut gradient = buffer_fill(16,0.0);
+    let mut total = 0.0;
+    let mut t = 0;
+    while t < 4 {
+        total += at(x,t*4);
+        gradient = buffer_set(gradient,t*4,at(y,t*4)-total/bt_as_float(t+1));
+        t += 1;
+    }
+    gradient
+}
+fn holdout(p: vector) -> f64 {
+    let mut loss = 0.0;
+    let mut i = 0;
+    while i < 16 {
+        let x = readings(1000+i);
+        let delta = errors(x,bt_transformer(x,4,4,2,12,true,p));
+        loss += dot(delta,delta);
+        i += 1;
+    }
+    loss/64.0
+}
+fn main() {
+    let mut p = bt_transformer_init(4,12,19);
+    let baseline = holdout(p);
+    let mut step = 0;
+    while step < 1200 {
+        let x = readings(step%64);
+        let y = bt_transformer(x,4,4,2,12,true,p);
+        let g = bt_transformer_backward(x,4,4,2,12,true,p,errors(x,y));
+        p = bt_sgd_step(p,bt_slice(g,len(x),len(p)),0.005);
+        step += 1;
+    }
+    let trained = holdout(p);
+    print!("Held-out mean squared error before training: "); println!(baseline);
+    print!("Held-out mean squared error after training: "); println!(trained);
+    bt_require(trained < baseline, "held-out error did not decrease");
+}

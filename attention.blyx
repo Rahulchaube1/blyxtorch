@@ -1,0 +1,159 @@
+use std::buffer;
+use tensor_ops;
+use blyxtorch;
+
+// Q, K and V have shape [tokens, width]. Adjacent channels form one head.
+fn probabilities(q: vector, k: vector, row: i64, head_start: i64, width: i64, head_width: i64, visible: i64, scale: f64) -> vector {
+    let mut p = buffer_fill(visible,0.0);
+    let mut maximum = 0.0;
+    let mut j = 0;
+    while j < visible {
+        let mut score = 0.0;
+        let mut c = 0;
+        while c < head_width {
+            score += at(q,row*width+head_start+c)*at(k,j*width+head_start+c);
+            c += 1;
+        }
+        score *= scale;
+        bt_require(btx_finite(score), "non-finite attention score");
+        if j == 0 || score > maximum { maximum = score; }
+        p = buffer_set(p,j,score);
+        j += 1;
+    }
+    let mut denominator = 0.0;
+    j = 0;
+    while j < visible {
+        let e = btx_exp_shift(at(p,j)-maximum);
+        denominator += e;
+        p = buffer_set(p,j,e);
+        j += 1;
+    }
+    j = 0;
+    while j < visible { p = buffer_set(p,j,at(p,j)/denominator); j += 1; }
+    p
+}
+fn attention(q: vector, k: vector, v: vector, tokens: i64, width: i64, heads: i64, causal: bool, dy: vector, backward: bool) -> vector {
+    bt_require(tokens > 0 && width > 0 && heads > 0 && width % heads == 0, "attention width must be divisible by head count");
+    let n = bt_size(tokens,width);
+    bt_require(len(q) == n && len(k) == n && len(v) == n && (!backward || len(dy) == n), "attention tensor shape mismatch");
+    let head_width = width / heads;
+    let scale = 1.0 / btx_sqrt(bt_as_float(head_width));
+    let mut size = n;
+    if backward { size = bt_size(3,n); }
+    let mut out = buffer_fill(size,0.0);
+    let mut row = 0;
+    while row < tokens {
+        let mut visible = tokens;
+        if causal { visible = row+1; }
+        let mut head = 0;
+        while head < width {
+            let p = probabilities(q,k,row,head,width,head_width,visible,scale);
+            let mut dp = buffer_fill(0,0.0);
+            let mut average = 0.0;
+            if backward { dp = buffer_fill(visible,0.0); }
+            let mut j = 0;
+            while j < visible {
+                let prob = at(p,j);
+                let mut c = 0;
+                let mut grad_prob = 0.0;
+                while c < head_width {
+                    let a = row*width+head+c;
+                    let b = j*width+head+c;
+                    if backward {
+                        grad_prob += at(dy,a)*at(v,b);
+                        out = buffer_set(out,2*n+b,at(out,2*n+b)+prob*at(dy,a));
+                    } else { out = buffer_set(out,a,at(out,a)+prob*at(v,b)); }
+                    c += 1;
+                }
+                if backward {
+                    dp = buffer_set(dp,j,grad_prob);
+                    average += prob*grad_prob;
+                }
+                j += 1;
+            }
+            if backward {
+                j = 0;
+                while j < visible {
+                    let ds = scale*at(p,j)*(at(dp,j)-average);
+                    let mut c = 0;
+                    while c < head_width {
+                        let a = row*width+head+c;
+                        let b = j*width+head+c;
+                        out = buffer_set(out,a,at(out,a)+ds*at(k,b));
+                        out = buffer_set(out,n+b,at(out,n+b)+ds*at(q,a));
+                        c += 1;
+                    }
+                    j += 1;
+                }
+            }
+            head += head_width;
+        }
+        row += 1;
+    }
+    out
+}
+pub fn bt_attention(q: vector, k: vector, v: vector, tokens: i64, width: i64, heads: i64, causal: bool) -> vector {
+    attention(q,k,v,tokens,width,heads,causal,[],false)
+}
+// Backward yields dQ, dK, dV in that order.
+pub fn bt_attention_backward(q: vector, k: vector, v: vector, tokens: i64, width: i64, heads: i64, causal: bool, dy: vector) -> vector {
+    attention(q,k,v,tokens,width,heads,causal,dy,true)
+}
+
+// Layer normalization over each token's channels, using population variance.
+// Parameters are [gain[width], bias[width]].
+fn layer_norm(x: vector, rows: i64, width: i64, p: vector, dy: vector, backward: bool) -> vector {
+    bt_require(rows > 0 && width > 0 && len(x) == bt_size(rows,width) && len(p) == bt_size(2,width) && (!backward || len(dy) == len(x)), "layer norm shape mismatch");
+    let mut size = len(x);
+    if backward { size = bt_total(size,len(p)); }
+    let mut out = buffer_fill(size,0.0);
+    let divisor = bt_as_float(width);
+    let mut r = 0;
+    while r < rows {
+        let start = r*width;
+        let mut mean = 0.0;
+        let mut c = 0;
+        while c < width { mean += at(x,start+c); c += 1; }
+        mean /= divisor;
+        let mut variance = 0.0;
+        c = 0;
+        while c < width {
+            let deviation = at(x,start+c)-mean;
+            variance += deviation*deviation;
+            c += 1;
+        }
+        let inv = 1.0/btx_sqrt(variance/divisor+0.00001);
+        let mut sum_grad = 0.0;
+        let mut sum_grad_norm = 0.0;
+        c = 0;
+        while c < width {
+            let id = start+c;
+            let normalized = (at(x,id)-mean)*inv;
+            if backward {
+                let g = at(dy,id);
+                sum_grad += g*at(p,c);
+                sum_grad_norm += g*at(p,c)*normalized;
+                out = buffer_set(out,len(x)+c,at(out,len(x)+c)+g*normalized);
+                out = buffer_set(out,len(x)+width+c,at(out,len(x)+width+c)+g);
+            } else { out = buffer_set(out,id,normalized*at(p,c)+at(p,width+c)); }
+            c += 1;
+        }
+        if backward {
+            c = 0;
+            while c < width {
+                let id = start+c;
+                let normalized = (at(x,id)-mean)*inv;
+                out = buffer_set(out,id,inv*(at(dy,id)*at(p,c)-(sum_grad+normalized*sum_grad_norm)/divisor));
+                c += 1;
+            }
+        }
+        r += 1;
+    }
+    out
+}
+pub fn bt_layer_norm(x: vector, rows: i64, width: i64, p: vector) -> vector {
+    layer_norm(x,rows,width,p,[],false)
+}
+pub fn bt_layer_norm_backward(x: vector, rows: i64, width: i64, p: vector, dy: vector) -> vector {
+    layer_norm(x,rows,width,p,dy,true)
+}
