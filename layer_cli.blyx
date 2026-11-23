@@ -6,32 +6,8 @@ use tensor_ops;
 use convolution;
 use transformer;
 use embedding;
+use numeric_io;
 
-fn natural(s: String) -> i64 {
-    bt_require(s != "", "expected a nonnegative decimal integer");
-    let mut rest = s;
-    let mut total = 0;
-    while rest != "" {
-        let mut digit = 0;
-        while digit < 10 && !text_starts(rest,int_text(digit)) { digit += 1; }
-        bt_require(digit < 10, "expected a nonnegative decimal integer");
-        total = bt_total(bt_size(total,10),digit);
-        rest = text_after(rest,int_text(digit));
-    }
-    total
-}
-fn numbers(fields: arglist, start: i64, count: i64) -> vector {
-    bt_require(args_len(fields) == bt_total(start,count), "wrong number of numeric fields");
-    let mut result = buffer_fill(count,0.0);
-    let mut i = 0;
-    while i < count {
-        let field = text_trim(args_at(fields,start+i));
-        bt_require(text_is_number(field), "expected a finite number");
-        result = buffer_set(result,i,text_number(field));
-        i += 1;
-    }
-    result
-}
 fn checkpoint(rows: i64, width: i64, table: vector) {
     print!("BTEMB1,"); print!(rows); print!(","); println!(width);
     let mut i = 0;
@@ -44,7 +20,14 @@ fn checkpoint(rows: i64, width: i64, table: vector) {
     }
 }
 fn load_rows(lines: arglist, rows: i64, width: i64) -> vector {
-    let mut table = buffer_fill(0,0.0);
+    let records = args_len(lines)-1;
+    bt_require(records <= rows, "too many embedding rows");
+    let stride = bt_total(width,2);
+    let mut table = buffer_fill(bt_size(records,stride),0.0);
+    // The index exists only during validation. Preserve the original checkpoint order.
+    let capacity = bt_total(bt_size(2,records),1);
+    let mut high_keys = buffer_fill(capacity,-1.0);
+    let mut low_keys = buffer_fill(capacity,0.0);
     let mut i = 1;
     while i < args_len(lines) {
         let fields = text_split(args_at(lines,i),",");
@@ -53,8 +36,26 @@ fn load_rows(lines: arglist, rows: i64, width: i64) -> vector {
         let lo = natural(args_at(fields,1));
         bt_require(lo < 1000000000, "invalid embedding key");
         let id = bt_total(bt_size(hi,1000000000),lo);
-        bt_require(bt_embedding_find(table,rows,width,id) < 0, "duplicate embedding row");
-        table = bt_embedding_put(table,rows,width,id,numbers(fields,2,width));
+        bt_require(id < rows, "invalid embedding row");
+        let high = bt_as_float(hi);
+        let low = bt_as_float(lo);
+        let mut slot = (hi*1000003+lo) % capacity;
+        while at(high_keys,slot) >= 0.0 {
+            bt_require(at(high_keys,slot) != high || at(low_keys,slot) != low, "duplicate embedding row");
+            slot = (slot+1) % capacity;
+        }
+        high_keys = buffer_set(high_keys,slot,high);
+        low_keys = buffer_set(low_keys,slot,low);
+        let base = (i-1)*stride;
+        table = buffer_set(table,base,high);
+        table = buffer_set(table,base+1,low);
+        let mut c = 0;
+        while c < width {
+            let field = args_at(fields,2+c);
+            bt_require(text_is_number(field), "expected a finite embedding value");
+            table = buffer_set(table,base+2+c,text_number(field));
+            c += 1;
+        }
         i += 1;
     }
     table

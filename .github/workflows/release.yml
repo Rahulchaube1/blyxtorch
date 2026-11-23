@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Rahulchaube1/blyxtorch-verification
-          ref: 2307476b713b4ba0cdde4e8d59845b83ede0585f
+          ref: 4a4ab37aa6f966d3c8b85440d5620637bf9d88df
           path: reference-tools
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
@@ -39,9 +39,12 @@ jobs:
         run: |
           mkdir -p build dist
           blyxc build main.blyx -o build/${{ matrix.file }}
-          cp blyxtorch.blyx training.blyx tensor_ops.blyx convolution.blyx attention.blyx transformer.blyx embedding.blyx sequence_example.blyx LAYERS.md build/
+          cp blyxtorch.blyx training.blyx tensor_ops.blyx convolution.blyx attention.blyx transformer.blyx embedding.blyx sequence_example.blyx probe.blyx probe_cli.blyx probe_graph.blyx layer_graph.blyx numeric_io.blyx LAYERS.md PORTABLE.md build/
+          cp reference-tools/device_fit.py reference-tools/provider-tools.mjs build/
       - run: python reference-tools/test_cli.py --source . --exe build/${{ matrix.file }}
       - run: python reference-tools/test_embeddings.py build/${{ matrix.file }}
+      - run: python reference-tools/test_portable.py build/${{ matrix.file }}
+      - run: node reference-tools/test-provider-tools.mjs build/${{ matrix.file }}
       - name: Check the dense parameter estimate
         shell: bash
         run: build/${{ matrix.file }} transformer-plan 128 32768 128 131072 128000 | jq -e '.total_parameters == 1653516337152 and .dense_fp64_weight_bytes == 13228130697216'
@@ -69,7 +72,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Rahulchaube1/blyxtorch-verification
-          ref: 2307476b713b4ba0cdde4e8d59845b83ede0585f
+          ref: 4a4ab37aa6f966d3c8b85440d5620637bf9d88df
           path: reference-tools
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
@@ -82,6 +85,11 @@ jobs:
       - run: python reference-tools/pytorch_reference.py --exe ./blyxtorch
       - run: blyxc build layer_tests.blyx -o layer-tests
       - run: python reference-tools/layer_reference.py ./layer-tests
+      - run: python -m pip install numpy iree-base-compiler==3.14.0 iree-base-runtime==3.14.0
+      - run: cp reference-tools/device_fit.py .
+      - run: python reference-tools/test_portable.py ./blyxtorch --device cpu
+      - run: python reference-tools/device_layers.py device-fixtures.npz --generate
+      - run: python reference-tools/device_layers.py device-fixtures.npz --cli ./blyxtorch --device cpu
   editor:
     needs: native
     runs-on: ubuntu-latest
@@ -110,9 +118,9 @@ jobs:
             dest="$stage/native/$platform"
             mkdir -p "$dest"
             if [[ "$platform" == windows-x64 ]]; then
-              unzip -q dist/blyxtorch-windows-x64.zip blyxtorch.exe blyxtorch.blyx training.blyx -d "$dest"
+              unzip -q dist/blyxtorch-windows-x64.zip blyxtorch.exe blyxtorch.blyx training.blyx device_fit.py -d "$dest"
             else
-              tar -xzf "dist/blyxtorch-$platform.tar.gz" -C "$dest" blyxtorch blyxtorch.blyx training.blyx
+              tar -xzf "dist/blyxtorch-$platform.tar.gz" -C "$dest" blyxtorch blyxtorch.blyx training.blyx device_fit.py
               chmod 755 "$dest/blyxtorch"
             fi
           done
@@ -151,8 +159,8 @@ jobs:
         with:
           files: dist/*
           body: |
-            <img src="https://raw.githubusercontent.com/Rahulchaube1/blyxtorch/v0.2.0/assets/logo.png" width="88" alt="BlyxTorch bird logo">
+            Fit a classifier or multi-output regressor on a CPU, or run its Blyx-generated training graph on a Vulkan GPU. The release includes editable starter projects, native trainers for three platforms and the universal editor extension.
 
-            Install the BlyxTorch VSIX in VS Code or an Open VSX client, or download the native CLI for your platform. The projects ZIP includes a desk sensor calibration program, a trained print-queue classifier and editor tasks for training on your own CSVs.
+            Export 2D convolution and attention forward and backward passes as StableHLO. Resume a checkpoint across native and device trainers or call a saved classifier from an OpenAI or Claude application. The device host and model-provider bridge are optional.
 
-            Train 1D and 2D convolutions and multi-head transformer blocks on the CPU. Run `blyxtorch layer-demo` to train both model families. The native archive includes the Blyx layer sources and a causal sensor example with held-out evaluation. Sparse embedding checkpoints store only the rows you update. [Layer guide](https://github.com/Rahulchaube1/blyxtorch/blob/v0.3.0/LAYERS.md) · [Handbook](https://doc.blyx-lang.space/guide/blyxtorch)
+            [Installation and examples](https://github.com/Rahulchaube1/blyxtorch/blob/v0.4.0/PORTABLE.md) · [Experiments and raw results](https://www.blyx-lang.space/articles/blyxtorch-portable-training) · [Training handbook](https://doc.blyx-lang.space/guide/blyxtorch)

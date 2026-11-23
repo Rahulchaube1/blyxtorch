@@ -1,0 +1,212 @@
+use std::buffer;
+use std::cli;
+use std::fs;
+use std::text;
+use tensor_ops;
+use numeric_io;
+use probe;
+use probe_graph;
+use blyxtorch;
+
+fn write_model(p: vector, features: i64, classes: i64, regression: bool) {
+    if regression { print!("BTREG1,"); } else { print!("BTPROBE1,"); }
+    print!(features); print!(","); println!(classes);
+    let mut r = 0;
+    while r <= classes {
+        let mut width = features;
+        if r == classes { width = classes; }
+        let mut f = 0;
+        while f < width {
+            if f > 0 { print!(","); }
+            print!(at(p,r*features+f));
+            f += 1;
+        }
+        println!();
+        r += 1;
+    }
+}
+
+fn read_weights(lines: arglist, features: i64, classes: i64) -> vector {
+    bt_require(args_len(lines) == bt_total(classes,2),"invalid number of checkpoint rows");
+    let mut p = buffer_fill(bt_affine_count(features,classes),0.0);
+    let mut r = 0;
+    while r <= classes {
+        let mut width = features;
+        if r == classes { width = classes; }
+        let row = numbers(text_split(args_at(lines,r+1),","),0,width);
+        let mut f = 0;
+        while f < width { p = buffer_set(p,r*features+f,at(row,f)); f += 1; }
+        r += 1;
+    }
+    p
+}
+
+// Keep examples in their file order. The last column contains a decimal class ID.
+fn read_data(lines: arglist, features: i64, classes: i64, regression: bool) -> vector {
+    let rows = args_len(lines)-1;
+    bt_require(rows > 0,"a labelled CSV needs a header and data rows");
+    let header = text_split(args_at(lines,0),",");
+    let mut target_width = 1;
+    if regression { target_width = classes; }
+    bt_require(args_len(header) == bt_total(features,target_width),"incorrect CSV header width");
+    let mut f = 0;
+    while f < features {
+        bt_require(args_at(header,f) == text_concat("x",int_text(f)),"expected features x0,x1,... in order");
+        f += 1;
+    }
+    if regression {
+        let mut c = 0;
+        while c < classes {
+            bt_require(args_at(header,features+c) == text_concat("y",int_text(c)),"expected outputs y0,y1,... in order");
+            c += 1;
+        }
+    } else { bt_require(args_at(header,features) == "class","expected a final class column"); }
+    let size = bt_size(rows,features);
+    let mut data = buffer_fill(bt_total(size,bt_size(rows,target_width)),0.0);
+    let mut r = 0;
+    while r < rows {
+        let fields = text_split(args_at(lines,r+1),",");
+        bt_require(args_len(fields) == features+target_width,"incorrect CSV row width");
+        f = 0;
+        while f < features {
+            let field = args_at(fields,f);
+            bt_require(text_is_number(field),"expected a finite CSV feature");
+            data = buffer_set(data,r*features+f,text_number(field));
+            f += 1;
+        }
+        if regression {
+            let mut c = 0;
+            while c < classes {
+                let field = text_trim(args_at(fields,features+c));
+                bt_require(text_is_number(field),"expected a finite regression target");
+                data = buffer_set(data,size+r*classes+c,text_number(field));
+                c += 1;
+            }
+        } else {
+            let label = natural(text_trim(args_at(fields,features)));
+            bt_require(label < classes,"class index is outside the model");
+            data = buffer_set(data,size+r,bt_as_float(label));
+        }
+        r += 1;
+    }
+    data
+}
+
+fn tool(provider: String) {
+    let name = "\"name\":\"classify_features\",\"description\":\"Classify a finite numeric feature vector using the application-selected local BlyxTorch checkpoint.\"";
+    let schema = "{\"type\":\"object\",\"properties\":{\"features\":{\"type\":\"array\",\"items\":{\"type\":\"number\"}}},\"required\":[\"features\"],\"additionalProperties\":false}";
+    if provider == "openai" {
+        print!("{\"type\":\"function\","); print!(name); print!(",\"strict\":true,\"parameters\":"); print!(schema); println!("}");
+    } else {
+        bt_require(provider == "claude","expected openai or claude");
+        print!("{"); print!(name); print!(",\"input_schema\":"); print!(schema); println!("}");
+    }
+}
+
+pub fn bt_probe_command(args: arglist) -> bool {
+    let argc = args_len(args);
+    if argc == 0 { return false; }
+    let cmd = args_at(args,0);
+    if cmd == "probe-device-fit" {
+        bt_require(argc == 7,"usage: probe-device-fit cpu|vulkan|xla-cpu|tpu MODEL LABELLED.csv EPOCHS RATE BATCH");
+        let dir = exe_dir();
+        let mut name = "blyxtorch";
+        let mut python = "python3";
+        if is_file(path_join(dir,"blyxtorch.exe")) { name = "blyxtorch.exe"; python = "python"; }
+        let runner = path_join(dir,"device_fit.py");
+        bt_require(is_file(runner),"optional device runner missing next to the executable; use the native release archive");
+        let mut launch = args_push(args_new(),runner);
+        launch = args_push(launch,path_join(dir,name));
+        launch = args_concat(launch,args_tail(args,1));
+        process_exit(process_run(env_get("BLYXTORCH_PYTHON",python),launch,args_new()));
+        return true;
+    }
+    if cmd == "probe-tool" {
+        bt_require(argc == 2,"usage: probe-tool openai|claude");
+        tool(args_at(args,1)); return true;
+    }
+    if cmd == "probe-graph" {
+        bt_require(argc == 5,"usage: probe-graph train|predict|regress-train|regress-predict BATCH FEATURES OUTPUTS");
+        let mode = args_at(args,1);
+        let regression = mode == "regress-train" || mode == "regress-predict";
+        bt_require(regression || mode == "train" || mode == "predict","unknown graph mode");
+        bt_probe_graph(mode == "train" || mode == "regress-train",regression,natural(args_at(args,2)),natural(args_at(args,3)),natural(args_at(args,4)));
+        return true;
+    }
+    if cmd == "probe-init" {
+        bt_require(argc == 3 || (argc == 4 && args_at(args,3) == "regression"),"usage: probe-init FEATURES OUTPUTS [regression]");
+        let d = natural(args_at(args,1)); let k = natural(args_at(args,2));
+        if argc == 3 { bt_probe_count(d,k); }
+        write_model(buffer_fill(bt_affine_count(d,k),0.0),d,k,argc == 4); return true;
+    }
+    if cmd != "probe-fit" && cmd != "probe-predict" && cmd != "probe-predict-file" && cmd != "probe-score" { return false; }
+    if cmd == "probe-fit" {
+        bt_require(argc == 6,"usage: probe-fit MODEL LABELLED.csv EPOCHS RATE BATCH");
+    } else { bt_require(argc == 3,"usage: probe-predict MODEL FEATURES_CSV | probe-predict-file MODEL ROW.csv | probe-score MODEL LABELLED.csv"); }
+    let lines = text_lines(read_text(args_at(args,1)));
+    bt_require(args_len(lines) >= 1,"empty probe checkpoint");
+    let header = text_split(args_at(lines,0),",");
+    bt_require(args_len(header) == 3,"invalid probe checkpoint header");
+    let regression = args_at(header,0) == "BTREG1";
+    bt_require(regression || args_at(header,0) == "BTPROBE1","unknown probe checkpoint format");
+    let d = natural(args_at(header,1));
+    let k = natural(args_at(header,2));
+    if !regression { bt_probe_count(d,k); }
+    let mut p = read_weights(lines,d,k);
+    if cmd == "probe-predict" || cmd == "probe-predict-file" {
+        let mut record = args_at(args,2);
+        if cmd == "probe-predict-file" { record = text_trim(read_text(record)); }
+        let x = numbers(text_split(record,","),0,d);
+        if regression {
+            let values = bt_affine(x,1,d,k,p);
+            bt_require(btx_valid(values,k),"nonfinite regression prediction");
+            print!("{\"values\":"); print!(values); println!("}"); return true;
+        }
+        let probabilities = bt_probe_probs(x,1,d,k,p);
+        print!("{\"class_index\":"); print!(bt_probe_class(probabilities,0,k)); print!(",\"probabilities\":");
+        print!(probabilities); println!("}"); return true;
+    }
+    let records = text_lines(read_text(args_at(args,2)));
+    let rows = args_len(records)-1;
+    let data = read_data(records,d,k,regression);
+    if cmd == "probe-score" {
+        if regression {
+            let values = bt_affine(bt_slice(data,0,rows*d),rows,d,k,p);
+            let mut mse = 0.0; let mut i = 0;
+            while i < len(values) {
+                let error = at(values,i)-at(data,rows*d+i);
+                mse += (error*error-mse)/bt_as_float(i+1); i += 1;
+            }
+            bt_require(btx_finite(mse),"nonfinite regression error");
+            print!("{\"rows\":"); print!(rows); print!(",\"rmse\":"); print!(btx_sqrt(mse)); println!("}"); return true;
+        }
+        let probabilities = bt_probe_probs(bt_slice(data,0,rows*d),rows,d,k,p);
+        let mut correct = 0; let mut r = 0;
+        while r < rows {
+            if bt_as_float(bt_probe_class(probabilities,r*k,k)) == at(data,rows*d+r) { correct += 1; }
+            r += 1;
+        }
+        print!("{\"rows\":"); print!(rows); print!(",\"correct\":"); print!(correct);
+        print!(",\"accuracy\":"); print!(bt_as_float(correct)/bt_as_float(rows)); println!("}"); return true;
+    }
+    let epochs = natural(args_at(args,3));
+    let rate = text_number(args_at(args,4));
+    let batch = natural(args_at(args,5));
+    bt_require(epochs > 0 && rate > 0.0 && batch > 0,"epochs, rate and batch must be positive");
+    let mut e = 0;
+    while e < epochs {
+        let mut start = 0;
+        while start < rows {
+            let mut n = rows-start;
+            if n > batch { n = batch; }
+            let x = bt_slice(data,start*d,n*d);
+            if regression {
+                p = bt_regression_step(x,bt_slice(data,rows*d+start*k,n*k),n,d,k,p,rate);
+            } else { p = bt_probe_step(x,bt_slice(data,rows*d+start,n),n,d,k,p,rate); }
+            start += n;
+        }
+        e += 1;
+    }
+    write_model(p,d,k,regression);
+    true
+}

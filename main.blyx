@@ -2,8 +2,12 @@ use std::cli;
 use emit;
 use default_model;
 use layer_cli;
+use probe_cli;
+use layer_graph;
 fn main() {
     let args=cli_args();
+    if bt_layer_graph_command(args) { return; }
+    if bt_probe_command(args) { return; }
     if bt_layer_command(args) { return; }
     if args_len(args)>0 && args_at(args,0)=="emit" {
         if args_len(args)!=4 {
@@ -17,6 +21,11 @@ fn main() {
         println!("The bundled model has two inputs, four hidden units and one binary output.");
         println!("blyxtorch layer-demo | embedding-init ROWS WIDTH | embedding-get FILE ROW | embedding-step FILE ROW RATE GRADIENT_CSV");
         println!("blyxtorch transformer-plan LAYERS WIDTH HEADS FEED_FORWARD VOCAB");
+        println!("blyxtorch probe-init FEATURES OUTPUTS [regression] | probe-fit MODEL LABELLED.csv EPOCHS RATE BATCH");
+        println!("blyxtorch probe-predict MODEL FEATURES_CSV | probe-score MODEL LABELLED.csv");
+        println!("blyxtorch probe-predict-file MODEL ROW.csv | probe-device-fit DEVICE MODEL LABELLED.csv EPOCHS RATE BATCH");
+        println!("blyxtorch probe-graph train|predict|regress-train|regress-predict BATCH FEATURES OUTPUTS | probe-tool openai|claude");
+        println!("blyxtorch layer-graph conv2d|conv2d-backward|attention|attention-backward ...");
     }
     bt_command(args);
 }

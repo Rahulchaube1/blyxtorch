@@ -1,0 +1,135 @@
+use std::cli;
+use std::text;
+use numeric_io;
+use tensor_ops;
+use convolution;
+
+// Use textual StableHLO dimension names while constructing a statically shaped module.
+fn line(template: String, keys: arglist, values: arglist) {
+    let mut result = template;
+    let mut i = 0;
+    while i < args_len(keys) {
+        result = args_join(text_split(result,args_at(keys,i)),args_at(values,i));
+        i += 1;
+    }
+    println!(result);
+}
+
+fn attention_graph(tokens: i64, heads: i64, width: i64, causal: bool, backward: bool) {
+    bt_require(tokens > 0 && heads > 0 && width > 0,"positive attention dimensions required");
+    bt_size(heads,bt_size(tokens,tokens));
+    bt_size(heads,bt_size(tokens,width));
+    let keys = text_split("HH TT DD"," ");
+    let mut values = args_new();
+    values = args_push(values,int_text(heads));
+    values = args_push(values,int_text(tokens));
+    values = args_push(values,int_text(width));
+    println!("module {");
+    if backward {
+        line("  func.func @main(%q: tensor<HHxTTxDDxf32>, %k: tensor<HHxTTxDDxf32>, %v: tensor<HHxTTxDDxf32>, %dy: tensor<HHxTTxDDxf32>) -> (tensor<HHxTTxDDxf32>, tensor<HHxTTxDDxf32>, tensor<HHxTTxDDxf32>) {",keys,values);
+    } else {
+        line("  func.func @main(%q: tensor<HHxTTxDDxf32>, %k: tensor<HHxTTxDDxf32>, %v: tensor<HHxTTxDDxf32>) -> tensor<HHxTTxDDxf32> {",keys,values);
+    }
+    line("    %raw = stablehlo.dot_general %q, %k, batching_dims = [0] x [0], contracting_dims = [2] x [2] : (tensor<HHxTTxDDxf32>, tensor<HHxTTxDDxf32>) -> tensor<HHxTTxTTxf32>",keys,values);
+    line("    %width = stablehlo.constant dense<DD.0> : tensor<f32>",keys,values);
+    line("    %scale = stablehlo.rsqrt %width : tensor<f32>",keys,values);
+    line("    %s = stablehlo.broadcast_in_dim %scale, dims = [] : (tensor<f32>) -> tensor<HHxTTxTTxf32>",keys,values);
+    line("    %scaled = stablehlo.multiply %raw, %s : tensor<HHxTTxTTxf32>",keys,values);
+    line("    %ninf = stablehlo.constant dense<0xFF800000> : tensor<f32>",keys,values);
+    if causal {
+        line("    %row = stablehlo.iota dim = 0 : tensor<TTxTTxi32>",keys,values);
+        line("    %col = stablehlo.iota dim = 1 : tensor<TTxTTxi32>",keys,values);
+        line("    %mask2 = stablehlo.compare GE, %row, %col, SIGNED : (tensor<TTxTTxi32>, tensor<TTxTTxi32>) -> tensor<TTxTTxi1>",keys,values);
+        line("    %mask = stablehlo.broadcast_in_dim %mask2, dims = [1, 2] : (tensor<TTxTTxi1>) -> tensor<HHxTTxTTxi1>",keys,values);
+        line("    %neg = stablehlo.broadcast_in_dim %ninf, dims = [] : (tensor<f32>) -> tensor<HHxTTxTTxf32>",keys,values);
+        line("    %score = stablehlo.select %mask, %scaled, %neg : tensor<HHxTTxTTxi1>, tensor<HHxTTxTTxf32>",keys,values);
+    } else {
+        line("    %score = stablehlo.reshape %scaled : (tensor<HHxTTxTTxf32>) -> tensor<HHxTTxTTxf32>",keys,values);
+    }
+    line("    %max = stablehlo.reduce(%score init: %ninf) applies stablehlo.maximum across dimensions = [2] : (tensor<HHxTTxTTxf32>, tensor<f32>) -> tensor<HHxTTxf32>",keys,values);
+    line("    %mx = stablehlo.broadcast_in_dim %max, dims = [0, 1] : (tensor<HHxTTxf32>) -> tensor<HHxTTxTTxf32>",keys,values);
+    line("    %shift = stablehlo.subtract %score, %mx : tensor<HHxTTxTTxf32>",keys,values);
+    line("    %exp = stablehlo.exponential %shift : tensor<HHxTTxTTxf32>",keys,values);
+    line("    %zero = stablehlo.constant dense<0.0> : tensor<f32>",keys,values);
+    line("    %den = stablehlo.reduce(%exp init: %zero) applies stablehlo.add across dimensions = [2] : (tensor<HHxTTxTTxf32>, tensor<f32>) -> tensor<HHxTTxf32>",keys,values);
+    line("    %denom = stablehlo.broadcast_in_dim %den, dims = [0, 1] : (tensor<HHxTTxf32>) -> tensor<HHxTTxTTxf32>",keys,values);
+    line("    %p = stablehlo.divide %exp, %denom : tensor<HHxTTxTTxf32>",keys,values);
+    if backward {
+        line("    %dv = stablehlo.dot_general %p, %dy, batching_dims = [0] x [0], contracting_dims = [1] x [1] : (tensor<HHxTTxTTxf32>, tensor<HHxTTxDDxf32>) -> tensor<HHxTTxDDxf32>",keys,values);
+        line("    %dp = stablehlo.dot_general %dy, %v, batching_dims = [0] x [0], contracting_dims = [2] x [2] : (tensor<HHxTTxDDxf32>, tensor<HHxTTxDDxf32>) -> tensor<HHxTTxTTxf32>",keys,values);
+        line("    %weighted = stablehlo.multiply %dp, %p : tensor<HHxTTxTTxf32>",keys,values);
+        line("    %sum = stablehlo.reduce(%weighted init: %zero) applies stablehlo.add across dimensions = [2] : (tensor<HHxTTxTTxf32>, tensor<f32>) -> tensor<HHxTTxf32>",keys,values);
+        line("    %avg = stablehlo.broadcast_in_dim %sum, dims = [0, 1] : (tensor<HHxTTxf32>) -> tensor<HHxTTxTTxf32>",keys,values);
+        line("    %centered = stablehlo.subtract %dp, %avg : tensor<HHxTTxTTxf32>",keys,values);
+        line("    %ds0 = stablehlo.multiply %centered, %p : tensor<HHxTTxTTxf32>",keys,values);
+        line("    %ds = stablehlo.multiply %ds0, %s : tensor<HHxTTxTTxf32>",keys,values);
+        line("    %dq = stablehlo.dot_general %ds, %k, batching_dims = [0] x [0], contracting_dims = [2] x [1] : (tensor<HHxTTxTTxf32>, tensor<HHxTTxDDxf32>) -> tensor<HHxTTxDDxf32>",keys,values);
+        line("    %dk = stablehlo.dot_general %ds, %q, batching_dims = [0] x [0], contracting_dims = [1] x [1] : (tensor<HHxTTxTTxf32>, tensor<HHxTTxDDxf32>) -> tensor<HHxTTxDDxf32>",keys,values);
+        line("    return %dq, %dk, %dv : tensor<HHxTTxDDxf32>, tensor<HHxTTxDDxf32>, tensor<HHxTTxDDxf32>",keys,values);
+    } else {
+        line("    %y = stablehlo.dot_general %p, %v, batching_dims = [0] x [0], contracting_dims = [2] x [1] : (tensor<HHxTTxTTxf32>, tensor<HHxTTxDDxf32>) -> tensor<HHxTTxDDxf32>",keys,values);
+        line("    return %y : tensor<HHxTTxDDxf32>",keys,values);
+    }
+    println!("  }"); println!("}");
+}
+
+fn convolution_graph(args: arglist, backward: bool) {
+    bt_require(args_len(args) == 11,"usage: layer-graph conv2d|conv2d-backward BATCH HEIGHT WIDTH INPUTS OUTPUTS KH KW STRIDE PAD");
+    let n = natural(args_at(args,2)); let h = natural(args_at(args,3)); let w = natural(args_at(args,4));
+    let cin = natural(args_at(args,5)); let cout = natural(args_at(args,6));
+    let kh = natural(args_at(args,7)); let kw = natural(args_at(args,8));
+    let s = natural(args_at(args,9)); let pad = natural(args_at(args,10));
+    let oh = bt_conv_extent(h,kh,s,pad); let ow = bt_conv_extent(w,kw,s,pad);
+    bt_require(n > 0,"positive convolution batch required");
+    bt_conv_count(kh,kw,cin,cout);
+    bt_size(n,bt_size(bt_size(h,w),cin)); bt_size(n,bt_size(bt_size(oh,ow),cout));
+    let keys = text_split("NN GH GW CI CO KH KW SS PP OH OW XL XR YL YR WH WW"," ");
+    let mut values = args_new();
+    values = args_push(values,int_text(n));
+    values = args_push(values,int_text(h));
+    values = args_push(values,int_text(w));
+    values = args_push(values,int_text(cin));
+    values = args_push(values,int_text(cout));
+    values = args_push(values,int_text(kh));
+    values = args_push(values,int_text(kw));
+    values = args_push(values,int_text(s));
+    values = args_push(values,int_text(pad));
+    values = args_push(values,int_text(oh));
+    values = args_push(values,int_text(ow));
+    values = args_push(values,int_text(kh-1-pad));
+    values = args_push(values,int_text(h+pad-((oh-1)*s+1)));
+    values = args_push(values,int_text(kw-1-pad));
+    values = args_push(values,int_text(w+pad-((ow-1)*s+1)));
+    values = args_push(values,int_text(kh-1-h-pad+((oh-1)*s+1)));
+    values = args_push(values,int_text(kw-1-w-pad+((ow-1)*s+1)));
+    println!("module {");
+    if backward {
+        line("  func.func @main(%x: tensor<NNxGHxGWxCIxf32>, %w: tensor<COxKHxKWxCIxf32>, %dy: tensor<NNxOHxOWxCOxf32>) -> (tensor<NNxGHxGWxCIxf32>, tensor<COxKHxKWxCIxf32>, tensor<COxf32>) {",keys,values);
+        line("    %flip = stablehlo.reverse %w, dims = [1, 2] : tensor<COxKHxKWxCIxf32>",keys,values);
+        line("    %dx = stablehlo.convolution(%dy, %flip) dim_numbers = [b, 0, 1, f]x[i, 0, 1, o]->[b, 0, 1, f], window = {stride = [1, 1], pad = [[XL, XR], [YL, YR]], lhs_dilate = [SS, SS]} {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<NNxOHxOWxCOxf32>, tensor<COxKHxKWxCIxf32>) -> tensor<NNxGHxGWxCIxf32>",keys,values);
+        line("    %dw = stablehlo.convolution(%x, %dy) dim_numbers = [f, 0, 1, b]x[i, 0, 1, o]->[f, 0, 1, b], window = {stride = [1, 1], pad = [[PP, WH], [PP, WW]], rhs_dilate = [SS, SS]} {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<NNxGHxGWxCIxf32>, tensor<NNxOHxOWxCOxf32>) -> tensor<COxKHxKWxCIxf32>",keys,values);
+        line("    %zero = stablehlo.constant dense<0.0> : tensor<f32>",keys,values);
+        line("    %db = stablehlo.reduce(%dy init: %zero) applies stablehlo.add across dimensions = [0, 1, 2] : (tensor<NNxOHxOWxCOxf32>, tensor<f32>) -> tensor<COxf32>",keys,values);
+        line("    return %dx, %dw, %db : tensor<NNxGHxGWxCIxf32>, tensor<COxKHxKWxCIxf32>, tensor<COxf32>",keys,values);
+    } else {
+        line("  func.func @main(%x: tensor<NNxGHxGWxCIxf32>, %w: tensor<COxKHxKWxCIxf32>, %b: tensor<COxf32>) -> tensor<NNxOHxOWxCOxf32> {",keys,values);
+        line("    %out = stablehlo.convolution(%x, %w) dim_numbers = [b, 0, 1, f]x[o, 0, 1, i]->[b, 0, 1, f], window = {stride = [SS, SS], pad = [[PP, PP], [PP, PP]]} {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<NNxGHxGWxCIxf32>, tensor<COxKHxKWxCIxf32>) -> tensor<NNxOHxOWxCOxf32>",keys,values);
+        line("    %bias = stablehlo.broadcast_in_dim %b, dims = [3] : (tensor<COxf32>) -> tensor<NNxOHxOWxCOxf32>",keys,values);
+        line("    %y = stablehlo.add %out, %bias : tensor<NNxOHxOWxCOxf32>",keys,values);
+        line("    return %y : tensor<NNxOHxOWxCOxf32>",keys,values);
+    }
+    println!("  }"); println!("}");
+}
+
+pub fn bt_layer_graph_command(args: arglist) -> bool {
+    if args_len(args) == 0 || args_at(args,0) != "layer-graph" { return false; }
+    bt_require(args_len(args) >= 2,"usage: layer-graph attention|attention-backward|conv2d|conv2d-backward ...");
+    let mode = args_at(args,1);
+    if mode == "conv2d" || mode == "conv2d-backward" { convolution_graph(args,mode == "conv2d-backward"); return true; }
+    bt_require((mode == "attention" || mode == "attention-backward") && args_len(args) == 6,
+               "usage: layer-graph attention|attention-backward TOKENS HEADS HEAD_WIDTH causal|full");
+    let mask = args_at(args,5);
+    bt_require(mask == "causal" || mask == "full","expected causal or full attention");
+    attention_graph(natural(args_at(args,2)),natural(args_at(args,3)),natural(args_at(args,4)),mask == "causal",mode == "attention-backward");
+    true
+}

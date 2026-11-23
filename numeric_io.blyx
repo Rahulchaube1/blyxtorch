@@ -1,0 +1,31 @@
+use std::buffer;
+use std::cli;
+use std::text;
+use tensor_ops;
+
+pub fn natural(s: String) -> i64 {
+    bt_require(s != "", "expected a nonnegative decimal integer");
+    let mut rest = s;
+    let mut total = 0;
+    while rest != "" {
+        let mut digit = 0;
+        while digit < 10 && !text_starts(rest,int_text(digit)) { digit += 1; }
+        bt_require(digit < 10, "expected a nonnegative decimal integer");
+        total = bt_total(bt_size(total,10),digit);
+        rest = text_after(rest,int_text(digit));
+    }
+    total
+}
+
+pub fn numbers(fields: arglist, start: i64, count: i64) -> vector {
+    bt_require(args_len(fields) == bt_total(start,count), "wrong number of numeric fields");
+    let mut result = buffer_fill(count,0.0);
+    let mut i = 0;
+    while i < count {
+        let field = text_trim(args_at(fields,start+i));
+        bt_require(text_is_number(field), "expected a finite number");
+        result = buffer_set(result,i,text_number(field));
+        i += 1;
+    }
+    result
+}

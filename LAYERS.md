@@ -1,4 +1,6 @@
-# Native layers in BlyxTorch 0.3
+# Native layers in BlyxTorch
+
+For f32 convolution and attention exports, optional device training and the shared checkpoint format, see the [portable training guide](PORTABLE.md).
 
 The native CPU API trains shared filters, multi-head transformer blocks and sparse embedding rows. Each function accepts flat f64 vectors and explicit integer shapes. The download contains a compiled CLI. Building the layer sources requires the Blyx compiler revision with `std::buffer`. [Compiler source](https://github.com/Rahulchaube1/blyxxxx/commit/120d6b6ec6df09ff018d7c18752fb3297b5e629d)
 

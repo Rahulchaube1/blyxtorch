@@ -4,9 +4,11 @@
 
 **Implementation language: [Blyx](https://www.blyx-lang.space/).**
 
-Train a convolution on a signal, fit a causal transformer to a sequence, or update sparse embeddings by row ID. BlyxTorch's CPU f64 layer implementations, gradients and training examples are written in Blyx. The original dense-network generator is also available for standalone classifiers and regressors.
+Fit a classifier on fixed embeddings, predict several continuous targets, or train convolution and transformer layers in Blyx. The native CPU path needs one executable. Version **0.4.0** adds optional Vulkan GPU training, portable StableHLO graphs and a checkpoint format shared between native and device trainers.
 
-**Version 0.3.0** adds native CPU layers. Run `blyxtorch layer-demo` to train a shared filter and a transformer block. The sequence example trains on 64 synthetic sensor streams and measures its prediction error on 16 held-out streams. [Download the releases](https://github.com/Rahulchaube1/blyxtorch/releases) · [Layer guide](LAYERS.md) · [Sequence example](sequence_example.blyx) · [Browser example for the portable dense API](https://www.blyx-lang.space/play?example=package-blyxtorch)
+On a held-out split of 360 handwritten digits, the native CPU trainer, Intel Vulkan GPU and a matched PyTorch model each recognized 332. A second experiment tests heating and cooling load estimates on previously unseen simulated building geometries. The release article includes the splits, timings, hardware and raw measurements. [Experiment and graphs](https://www.blyx-lang.space/articles/blyxtorch-portable-training)
+
+Train your first classifier with the six-row example, export convolution and attention gradients, or call your checkpoint from an OpenAI or Claude application. [Portable training guide](PORTABLE.md) · [CPU layers and sparse embeddings](LAYERS.md) · [Downloads](https://github.com/Rahulchaube1/blyxtorch/releases/tag/v0.4.0)
 
 ## Use BlyxTorch in your editor
 
@@ -17,7 +19,7 @@ Install **BlyxTorch** (publisher **RahulChaube**) or download the VSIX from the 
 | [Desk sensor calibration](projects/sensor-calibration.blyx) | Train a gain and offset using BlyxTorch automatic differentiation and predict two held-out readings. [Run in the browser](https://www.blyx-lang.space/play?example=blyxtorch-sensor) |
 | [Print-queue classifier](projects/queue-classifier.blyx) | Train a dense network on 16 synthetic print jobs, evaluate six held-out jobs and predict wait categories for four new jobs. [Run in the browser](https://www.blyx-lang.space/play?example=blyxtorch-queue) |
 
-The [project workspace](https://github.com/Rahulchaube1/blyxtorch/releases/download/v0.2.0/blyxtorch-projects-0.2.0.zip) includes the CSV files, trained weights and native editor tasks. [Project instructions](projects/README.md)
+The [project workspace](https://github.com/Rahulchaube1/blyxtorch/releases/download/v0.4.0/blyxtorch-projects-0.4.0.zip) includes the CSV files, trained weights and native editor tasks. [Project instructions](projects/README.md)
 
 ## Install with a package manager
 

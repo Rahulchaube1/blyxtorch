@@ -1,0 +1,105 @@
+use std::buffer;
+use tensor_ops;
+use blyxtorch;
+
+// Each row of W holds one class's feature weights. Biases follow all rows.
+pub fn bt_probe_count(features: i64, classes: i64) -> i64 {
+    bt_require(classes >= 2, "a classifier requires at least two classes");
+    bt_affine_count(features,classes)
+}
+
+pub fn bt_probe_probs(x: vector, rows: i64, features: i64, classes: i64, p: vector) -> vector {
+    bt_probe_count(features,classes);
+    let mut logits = bt_affine(x,rows,features,classes,p);
+    let mut r = 0;
+    while r < rows {
+        let base = r*classes;
+        let mut maximum = at(logits,base);
+        let mut c = 0;
+        while c < classes {
+            let v = at(logits,base+c);
+            bt_require(btx_finite(v), "nonfinite classifier score");
+            if v > maximum { maximum = v; }
+            c += 1;
+        }
+        let mut sum_exp = 0.0;
+        c = 0;
+        while c < classes {
+            let e = btx_exp_shift(at(logits,base+c)-maximum);
+            logits = buffer_set(logits,base+c,e);
+            sum_exp += e;
+            c += 1;
+        }
+        c = 0;
+        while c < classes {
+            logits = buffer_set(logits,base+c,at(logits,base+c)/sum_exp);
+            c += 1;
+        }
+        r += 1;
+    }
+    logits
+}
+
+// Mean cross-entropy SGD. Labels are class indices encoded exactly in a vector.
+pub fn bt_probe_step(x: vector, labels: vector, rows: i64, features: i64, classes: i64, p: vector, rate: f64) -> vector {
+    bt_require(len(labels) == rows && btx_finite(rate) && rate > 0.0, "invalid labels or learning rate");
+    let probs = bt_probe_probs(x,rows,features,classes,p);
+    let mut errors = probs;
+    let mut r = 0;
+    while r < rows {
+        let label = at(labels,r);
+        let mut found = false;
+        let mut c = 0;
+        while c < classes {
+            let mut delta = at(probs,r*classes+c);
+            if label == bt_as_float(c) { delta -= 1.0; found = true; }
+            errors = buffer_set(errors,r*classes+c,delta);
+            c += 1;
+        }
+        bt_require(found,"class index is outside the model");
+        r += 1;
+    }
+    update_head(x,errors,rows,features,classes,p,rate)
+}
+
+// One half the squared error, summed over outputs and averaged over observations.
+pub fn bt_regression_step(x: vector, targets: vector, rows: i64, features: i64, outputs: i64, p: vector, rate: f64) -> vector {
+    let mut error = bt_affine(x,rows,features,outputs,p);
+    bt_require(len(targets) == len(error),"regression target shape mismatch");
+    let mut i = 0;
+    while i < len(error) { error = buffer_set(error,i,at(error,i)-at(targets,i)); i += 1; }
+    update_head(x,error,rows,features,outputs,p,rate)
+}
+
+fn update_head(x: vector, errors: vector, rows: i64, features: i64, outputs: i64, p: vector, rate: f64) -> vector {
+    let mut gradient = buffer_fill(len(p),0.0);
+    let mut r = 0;
+    while r < rows {
+        let mut c = 0;
+        while c < outputs {
+            let delta = at(errors,r*outputs+c);
+            let bias = features*outputs+c;
+            gradient = buffer_set(gradient,bias,at(gradient,bias)+delta);
+            let mut f = 0;
+            while f < features {
+                let index = c*features+f;
+                gradient = buffer_set(gradient,index,at(gradient,index)+delta*at(x,r*features+f));
+                f += 1;
+            }
+            c += 1;
+        }
+        r += 1;
+    }
+    bt_sgd_step(p,gradient,rate/bt_as_float(rows))
+}
+
+pub fn bt_probe_class(probs: vector, start: i64, classes: i64) -> i64 {
+    bt_require(start >= 0 && classes >= 2 && bt_total(start,classes) <= len(probs), "invalid probability row");
+    let mut best = 0;
+    let mut c = 1;
+    while c < classes {
+        if at(probs,start+c) > at(probs,start+best) { best = c; }
+        c += 1;
+    }
+    best
+}

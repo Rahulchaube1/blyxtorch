@@ -1,0 +1,61 @@
+use std::cli;
+use std::text;
+use tensor_ops;
+use probe;
+
+// Replace only the fixed dimension markers in the operation templates.
+fn line(template: String, batch: i64, features: i64, classes: i64) {
+    let a = args_join(text_split(template,"BB"),int_text(batch));
+    let b = args_join(text_split(a,"FF"),int_text(features));
+    println!(args_join(text_split(b,"CC"),int_text(classes)));
+}
+
+pub fn bt_probe_graph(training: bool, regression: bool, batch: i64, features: i64, classes: i64) {
+    bt_require(batch > 0,"batch must be positive");
+    if regression { bt_affine_count(features,classes); } else { bt_probe_count(features,classes); }
+    bt_size(batch,features);
+    bt_size(batch,classes);
+    println!("module {");
+    if training {
+        line("  func.func @main(%x: tensor<BBxFFxf32>, %w: tensor<CCxFFxf32>, %b: tensor<CCxf32>, %targets: tensor<BBxCCxf32>, %rate: tensor<f32>) -> (tensor<CCxFFxf32>, tensor<CCxf32>) {",batch,features,classes);
+    } else {
+        line("  func.func @main(%x: tensor<BBxFFxf32>, %w: tensor<CCxFFxf32>, %b: tensor<CCxf32>) -> tensor<BBxCCxf32> {",batch,features,classes);
+    }
+    line("    %scores = stablehlo.dot_general %x, %w, contracting_dims = [1] x [1] : (tensor<BBxFFxf32>, tensor<CCxFFxf32>) -> tensor<BBxCCxf32>",batch,features,classes);
+    line("    %bias = stablehlo.broadcast_in_dim %b, dims = [1] : (tensor<CCxf32>) -> tensor<BBxCCxf32>",batch,features,classes);
+    line("    %z = stablehlo.add %scores, %bias : tensor<BBxCCxf32>",batch,features,classes);
+    if regression && !training {
+        line("    return %z : tensor<BBxCCxf32>",batch,features,classes);
+        println!("  }"); println!("}"); return;
+    }
+    println!("    %zero = stablehlo.constant dense<0.0> : tensor<f32>");
+    if !regression {
+    println!("    %ninf = stablehlo.constant dense<0xFF800000> : tensor<f32>");
+    line("    %m = stablehlo.reduce(%z init: %ninf) applies stablehlo.maximum across dimensions = [1] : (tensor<BBxCCxf32>, tensor<f32>) -> tensor<BBxf32>",batch,features,classes);
+    line("    %mb = stablehlo.broadcast_in_dim %m, dims = [0] : (tensor<BBxf32>) -> tensor<BBxCCxf32>",batch,features,classes);
+    line("    %shifted = stablehlo.subtract %z, %mb : tensor<BBxCCxf32>",batch,features,classes);
+    line("    %e = stablehlo.exponential %shifted : tensor<BBxCCxf32>",batch,features,classes);
+    line("    %sum = stablehlo.reduce(%e init: %zero) applies stablehlo.add across dimensions = [1] : (tensor<BBxCCxf32>, tensor<f32>) -> tensor<BBxf32>",batch,features,classes);
+    line("    %denom = stablehlo.broadcast_in_dim %sum, dims = [0] : (tensor<BBxf32>) -> tensor<BBxCCxf32>",batch,features,classes);
+    line("    %probs = stablehlo.divide %e, %denom : tensor<BBxCCxf32>",batch,features,classes);
+    }
+    if training {
+        if regression {
+            line("    %error = stablehlo.subtract %z, %targets : tensor<BBxCCxf32>",batch,features,classes);
+        } else { line("    %error = stablehlo.subtract %probs, %targets : tensor<BBxCCxf32>",batch,features,classes); }
+        line("    %dw = stablehlo.dot_general %error, %x, contracting_dims = [0] x [0] : (tensor<BBxCCxf32>, tensor<BBxFFxf32>) -> tensor<CCxFFxf32>",batch,features,classes);
+        line("    %db = stablehlo.reduce(%error init: %zero) applies stablehlo.add across dimensions = [0] : (tensor<BBxCCxf32>, tensor<f32>) -> tensor<CCxf32>",batch,features,classes);
+        line("    %rows = stablehlo.constant dense<BB.0> : tensor<f32>",batch,features,classes);
+        line("    %step = stablehlo.divide %rate, %rows : tensor<f32>",batch,features,classes);
+        line("    %sw = stablehlo.broadcast_in_dim %step, dims = [] : (tensor<f32>) -> tensor<CCxFFxf32>",batch,features,classes);
+        line("    %sb = stablehlo.broadcast_in_dim %step, dims = [] : (tensor<f32>) -> tensor<CCxf32>",batch,features,classes);
+        line("    %gw = stablehlo.multiply %dw, %sw : tensor<CCxFFxf32>",batch,features,classes);
+        line("    %gb = stablehlo.multiply %db, %sb : tensor<CCxf32>",batch,features,classes);
+        line("    %new_w = stablehlo.subtract %w, %gw : tensor<CCxFFxf32>",batch,features,classes);
+        line("    %new_b = stablehlo.subtract %b, %gb : tensor<CCxf32>",batch,features,classes);
+        line("    return %new_w, %new_b : tensor<CCxFFxf32>, tensor<CCxf32>",batch,features,classes);
+    } else {
+        line("    return %probs : tensor<BBxCCxf32>",batch,features,classes);
+    }
+    println!("  }"); println!("}");
+}

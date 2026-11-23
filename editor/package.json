@@ -1,8 +1,8 @@
 {
   "name": "blyxtorch",
   "displayName": "BlyxTorch",
-  "description": "Train CPU networks in Blyx with convolution, multi-head attention, transformer blocks and sparse embeddings. Includes native trainers and editable projects.",
-  "version": "0.3.0",
+  "description": "Train classifiers and regressors in Blyx on CPU or Vulkan GPU. Export convolution and attention gradients. Includes native trainers and editable projects.",
+  "version": "0.4.0",
   "publisher": "RahulChaube",
   "license": "(MIT OR Apache-2.0)",
   "icon": "logo.png",
@@ -61,7 +61,7 @@
           {
             "id": "native",
             "title": "Train and evaluate a classifier",
-            "description": "Extract the starter and open BlyxTorch.code-workspace. Choose Terminal → Run Task → BlyxTorch: Evaluate print queue.\n[Download both projects](https://github.com/Rahulchaube1/blyxtorch/releases/download/v0.2.0/blyxtorch-projects-0.2.0.zip)",
+            "description": "Extract the starter and open BlyxTorch.code-workspace. Choose Terminal → Run Task → BlyxTorch: Evaluate print queue.\n[Download both projects](https://github.com/Rahulchaube1/blyxtorch/releases/download/v0.4.0/blyxtorch-projects-0.4.0.zip)",
             "media": {
               "markdown": "walkthrough/queue.md"
             }

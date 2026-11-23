@@ -1,5 +1,9 @@
 # Changes
 
+## 0.4.0
+
+Adds native feature classifiers, multi-output regression, optional device training and portable convolution and attention graphs. Existing sparse checkpoints load faster.
+
 ## 0.3.0
 
 The native trainer now includes a convolution and transformer training demo, a parameter planner and sparse embedding checkpoint commands.
