@@ -1,0 +1,44 @@
+use std::cli;
+use std::text;
+use numeric_io;
+use tensor_ops;
+use quantum;
+
+pub fn bt_quantum_command(args: arglist) -> bool {
+    if args_len(args) == 0 { return false; }
+    let cmd = args_at(args,0);
+    if cmd != "q-expect" && cmd != "q-grad" && cmd != "q-fit" && cmd != "q-qasm" { return false; }
+    bt_require((cmd == "q-fit" && args_len(args) == 7) || (cmd != "q-fit" && args_len(args) == 4),"Usage: q-expect|q-grad|q-qasm QUBITS READOUT ANGLES_CSV or q-fit QUBITS READOUT ANGLES_CSV TARGET RATE STEPS");
+    let n = natural(args_at(args,1));
+    let readout = natural(args_at(args,2));
+    let values = text_split(args_at(args,3),",");
+    let mut angles = numbers(values,0,args_len(values));
+    if cmd == "q-expect" { println!(bt_q_expect(angles,n,readout)); return true; }
+    if cmd == "q-grad" { println!(bt_q_gradient(angles,n,readout)); return true; }
+    if cmd == "q-fit" {
+        bt_require(text_is_number(args_at(args,4)) && text_is_number(args_at(args,5)),"Expected numeric target and rate");
+        let target = text_number(args_at(args,4)); let rate = text_number(args_at(args,5)); let steps = natural(args_at(args,6));
+        bt_require(steps > 0,"Expected a positive step count");
+        let mut i = 0;
+        while i < steps { angles = bt_q_step(angles,n,readout,target,rate); i += 1; }
+        println!(angles); return true;
+    }
+    bt_require(n > 0 && n <= 16 && readout < n && len(angles) > 0 && len(angles)%n == 0,"Invalid circuit shape");
+    let mut i = 0;
+    while i < len(angles) {
+        bt_require(at(angles,i) >= -1000000.0 && at(angles,i) <= 1000000.0,"Angle outside supported range");
+        i += 1;
+    }
+    println!("OPENQASM 3.0;"); println!("include \"stdgates.inc\";");
+    print!("qubit["); print!(n); println!("] q;"); println!("bit[1] c;");
+    i = 0;
+    while i < len(angles) {
+        let mut j = 0;
+        while j < n { print!("ry("); print!(at(angles,i+j)); print!(") q["); print!(j); println!("];"); j += 1; }
+        j = 0;
+        while j+1 < n { print!("cx q["); print!(j); print!("], q["); print!(j+1); println!("];"); j += 1; }
+        i += n;
+    }
+    print!("c[0] = measure q["); print!(readout); println!("];");
+    true
+}

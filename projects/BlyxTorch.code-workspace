@@ -81,6 +81,30 @@
           "cwd": "${workspaceFolder}"
         },
         "problemMatcher": []
+      },
+      {
+        "label": "BlyxTorch: Fit a quantum circuit",
+        "type": "process",
+        "command": "${extensionInstallFolder:RahulChaube.blyxtorch}/native/linux-x64/blyxtorch",
+        "windows": {
+          "command": "${extensionInstallFolder:RahulChaube.blyxtorch}/native/windows-x64/blyxtorch.exe"
+        },
+        "osx": {
+          "command": "${extensionInstallFolder:RahulChaube.blyxtorch}/native/macos-arm64/blyxtorch"
+        },
+        "args": [
+          "q-fit",
+          "2",
+          "1",
+          "0.3,-0.7,0.2,0.6",
+          "-0.25",
+          "0.2",
+          "40"
+        ],
+        "options": {
+          "cwd": "${workspaceFolder}"
+        },
+        "problemMatcher": []
       }
     ]
   }

@@ -3,9 +3,11 @@ use emit;
 use default_model;
 use layer_cli;
 use probe_cli;
+use quantum_cli;
 use layer_graph;
 fn main() {
     let args=cli_args();
+    if bt_quantum_command(args) { return; }
     if bt_layer_graph_command(args) { return; }
     if bt_probe_command(args) { return; }
     if bt_layer_command(args) { return; }
@@ -17,6 +19,7 @@ fn main() {
         btx_emit(args_at(args,1),args_at(args,2),args_at(args,3),exe_dir()); return;
     }
     if args_len(args)==0 || args_at(args,0)=="--help" || args_at(args,0)=="help" {
+        println!("q-expect|q-grad|q-qasm QUBITS READOUT ANGLES_CSV | q-fit QUBITS READOUT ANGLES_CSV TARGET RATE STEPS");
         println!("blyxtorch emit WIDTHS mse|binary|softmax tanh|relu|sigmoid > model.blyx");
         println!("The bundled model has two inputs, four hidden units and one binary output.");
         println!("blyxtorch layer-demo | embedding-init ROWS WIDTH | embedding-get FILE ROW | embedding-step FILE ROW RATE GRADIENT_CSV");

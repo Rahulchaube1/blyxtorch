@@ -27,6 +27,7 @@ jobs:
       - run: cargo install --locked --git https://github.com/Rahulchaube1/blyxxxx --rev 120d6b6ec6df09ff018d7c18752fb3297b5e629d blyxc
       - run: blyxc native-run tests.blyx
       - run: blyxc native-run example.blyx
+      - run: blyxc native-run scale_example.blyx
       - run: blyxc native-run layer_tests.blyx
       - run: blyxc native-run sequence_example.blyx
       - name: Run both portable projects
@@ -39,7 +40,11 @@ jobs:
         run: |
           mkdir -p build dist
           blyxc build main.blyx -o build/${{ matrix.file }}
-          cp blyxtorch.blyx training.blyx tensor_ops.blyx convolution.blyx attention.blyx transformer.blyx embedding.blyx sequence_example.blyx probe.blyx probe_cli.blyx probe_graph.blyx layer_graph.blyx numeric_io.blyx LAYERS.md PORTABLE.md build/
+          cp blyxtorch.blyx training.blyx tensor_ops.blyx convolution.blyx attention.blyx transformer.blyx embedding.blyx sequence_example.blyx probe.blyx probe_cli.blyx probe_graph.blyx layer_graph.blyx numeric_io.blyx LAYERS.md PORTABLE.md quantum.blyx quantum_cli.blyx quantum_study.blyx scale_example.blyx SCALE.md build/
+          study=build/quantum-study
+          if [[ "$RUNNER_OS" == Windows ]]; then study="$study.exe"; fi
+          blyxc build quantum_study.blyx -o "$study"
+          "$study" adjoint 4 3 1
           cp reference-tools/device_fit.py reference-tools/provider-tools.mjs build/
       - run: python reference-tools/test_cli.py --source . --exe build/${{ matrix.file }}
       - run: python reference-tools/test_embeddings.py build/${{ matrix.file }}
@@ -159,8 +164,6 @@ jobs:
         with:
           files: dist/*
           body: |
-            Fit a classifier or multi-output regressor on a CPU, or run its Blyx-generated training graph on a Vulkan GPU. The release includes editable starter projects, native trainers for three platforms and the universal editor extension.
+            Train and differentiate real-amplitude Ry/CNOT circuits on CPU, or export a measured circuit to OpenQASM 3. Includes native trainers, a benchmark executable and the universal desktop editor. Existing CPU and Vulkan training commands remain available.
 
-            Export 2D convolution and attention forward and backward passes as StableHLO. Resume a checkpoint across native and device trainers or call a saved classifier from an OpenAI or Claude application. The device host and model-provider bridge are optional.
-
-            [Installation and examples](https://github.com/Rahulchaube1/blyxtorch/blob/v0.4.0/PORTABLE.md) · [Experiments and raw results](https://www.blyx-lang.space/articles/blyxtorch-portable-training) · [Training handbook](https://doc.blyx-lang.space/guide/blyxtorch)
+            [Circuit guide](https://github.com/Rahulchaube1/blyxtorch/blob/v0.5.0/SCALE.md) · [Experiments and raw results](https://www.blyx-lang.space/articles/training-in-factors)

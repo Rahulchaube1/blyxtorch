@@ -1,8 +1,8 @@
 {
   "name": "blyxtorch",
   "displayName": "BlyxTorch",
-  "description": "Train classifiers and regressors in Blyx on CPU or Vulkan GPU. Export convolution and attention gradients. Includes native trainers and editable projects.",
-  "version": "0.4.0",
+  "description": "Train neural networks and simulate differentiable Ry/CNOT circuits in Blyx. Includes native trainers, editable projects and OpenQASM 3 export.",
+  "version": "0.5.0",
   "publisher": "RahulChaube",
   "license": "(MIT OR Apache-2.0)",
   "icon": "logo.png",
@@ -48,7 +48,7 @@
       {
         "id": "blyxtorch.start",
         "title": "Get started with BlyxTorch",
-        "description": "Run a calibration model, then train and evaluate a print-queue classifier.",
+        "description": "Train neural networks and simulate differentiable Ry/CNOT circuits in Blyx. Includes native trainers, editable projects and OpenQASM 3 export.",
         "steps": [
           {
             "id": "portable",
@@ -61,9 +61,17 @@
           {
             "id": "native",
             "title": "Train and evaluate a classifier",
-            "description": "Extract the starter and open BlyxTorch.code-workspace. Choose Terminal → Run Task → BlyxTorch: Evaluate print queue.\n[Download both projects](https://github.com/Rahulchaube1/blyxtorch/releases/download/v0.4.0/blyxtorch-projects-0.4.0.zip)",
+            "description": "Extract the starter and open BlyxTorch.code-workspace. Choose Terminal → Run Task → BlyxTorch: Evaluate print queue.\n[Download both projects](https://github.com/Rahulchaube1/blyxtorch/releases/download/v0.5.0/blyxtorch-projects-0.5.0.zip)",
             "media": {
               "markdown": "walkthrough/queue.md"
+            }
+          },
+          {
+            "id": "scale",
+            "title": "Differentiate a quantum circuit",
+            "description": "Extract the starter, open its workspace and run **BlyxTorch: Fit a quantum circuit**.\n[Open the experiment](https://www.blyx-lang.space/articles/training-in-factors)",
+            "media": {
+              "markdown": "scale.md"
             }
           }
         ]

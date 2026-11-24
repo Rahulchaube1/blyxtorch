@@ -200,7 +200,7 @@ fn btx_eval(p: vector, path: str, mode: str) {
 }
 pub fn bt_command(a: arglist) {
     let cmd=btx_arg(a,0,"--help");
-    if cmd=="--version" { println!("BlyxTorch 0.4.0"); return; }
+    if cmd=="--version" { println!("BlyxTorch 0.5.0"); return; }
     if cmd=="--help" || cmd=="help" {
         println!(bt_model_key()); println!("train DATA.csv [epochs] [rate] [batch] [adam|sgd] [seed]");
         println!("train-score TRAIN.csv LABELLED.csv [epochs] [rate] [batch] [adam|sgd] [seed]");

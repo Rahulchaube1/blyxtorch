@@ -1,0 +1,31 @@
+use quantum;
+use tensor_ops;
+use std::text;
+use std::cli;
+use std::buffer;
+use numeric_io;
+
+fn main() {
+    let args = cli_args();
+    bt_require(args_len(args) == 4,"quantum-study adjoint|shift QUBITS LAYERS REPEATS");
+    let mode = args_at(args,0); let n = natural(args_at(args,1));
+    let depth = natural(args_at(args,2)); let reps = natural(args_at(args,3));
+    bt_require((mode == "adjoint" || mode == "shift") && n >= 1 && n <= 16 && depth > 0 && reps > 0,"Invalid study inputs");
+    let mut angles = buffer_fill(bt_size(n,depth),0.0); let mut i = 0;
+    while i < len(angles) { angles = buffer_set(angles,i, 0.013*bt_as_float(i%101)-0.4); i += 1; }
+    let mut pass = 0; let mut result = buffer_fill(len(angles),0.0);
+    while pass < reps {
+        if mode == "adjoint" { result = bt_q_gradient(angles,n,n-1); }
+        else {
+            i = 0;
+            while i < len(angles) {
+                let plus = buffer_set(angles,i,at(angles,i)+1.5707963267948966);
+                let minus = buffer_set(angles,i,at(angles,i)-1.5707963267948966);
+                let grad = 0.5*(bt_q_expect(plus,n,n-1)-bt_q_expect(minus,n,n-1));
+                result = buffer_set(result,i,grad); i += 1;
+            }
+        }
+        pass += 1;
+    }
+    println!(result);
+}

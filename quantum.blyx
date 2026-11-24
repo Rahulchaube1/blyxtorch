@@ -1,0 +1,153 @@
+use std::buffer;
+use tensor_ops;
+
+// q0 is the least significant bit of the basis index. Each layer applies
+// one independent Ry per qubit, followed by a nearest-neighbour CNOT chain.
+fn bt_q_stride(qubit: i64) -> i64 {
+    let mut stride = 1;
+    let mut i = 0;
+    while i < qubit { stride *= 2; i += 1; }
+    stride
+}
+fn bt_q_shape(angles: vector, qubits: i64, readout: i64) {
+    bt_require(qubits >= 1 && qubits <= 16, "Quantum simulation supports 1 to 16 qubits");
+    bt_require(readout >= 0 && readout < qubits, "Invalid readout qubit");
+    bt_require(len(angles) >= qubits && len(angles)%qubits == 0, "Expected one angle per qubit per layer");
+    let mut i = 0;
+    while i < len(angles) {
+        bt_require(at(angles,i) >= -1000000.0 && at(angles,i) <= 1000000.0, "Angles must be finite and within one million radians");
+        i += 1;
+    }
+}
+fn bt_q_sin(angle: f64) -> f64 {
+    let pi = 3.141592653589793;
+    let mut x = angle % (2.0*pi);
+    if x > pi { x -= 2.0*pi; }
+    if x < -pi { x += 2.0*pi; }
+    if x > 0.5*pi { x = pi-x; }
+    if x < -0.5*pi { x = -pi-x; }
+    let mut term = x;
+    let mut total = x;
+    let mut k = 1;
+    while k <= 11 {
+        term = term*(-x*x)/bt_as_float((2*k)*(2*k+1));
+        total += term; k += 1;
+    }
+    total
+}
+fn bt_q_rotate(wave: vector, q: i64, angle: f64) -> vector {
+    let stride = bt_q_stride(q);
+    let s = bt_q_sin(0.5*angle);
+    let c = bt_q_sin(0.5*angle + 1.5707963267948966);
+    let mut out = wave;
+    let mut base = 0;
+    while base < len(out) {
+        let mut j = base;
+        while j < base+stride {
+            let a = at(out,j); let b = at(out,j+stride);
+            out = buffer_set(out,j,c*a-s*b);
+            out = buffer_set(out,j+stride,s*a+c*b);
+            j += 1;
+        }
+        base += 2*stride;
+    }
+    out
+}
+fn bt_q_cx(wave: vector, control: i64) -> vector {
+    let stride = bt_q_stride(control);
+    let mut out = wave;
+    let mut base = 0;
+    while base < len(out) {
+        let mut j = base+stride;
+        while j < base+2*stride {
+            let a = at(out,j);
+            let b = at(out,j+2*stride);
+            out = buffer_set(out,j,b);
+            out = buffer_set(out,j+2*stride,a);
+            j += 1;
+        }
+        base += 4*stride;
+    }
+    out
+}
+pub fn bt_q_state(angles: vector, qubits: i64) -> vector {
+    bt_q_shape(angles,qubits,0);
+    let mut wave = buffer_fill(bt_q_stride(qubits),0.0);
+    wave = buffer_set(wave,0,1.0);
+    let mut layer = 0;
+    while layer < len(angles) {
+        let mut q = 0;
+        while q < qubits { wave = bt_q_rotate(wave,q,at(angles,layer+q)); q += 1; }
+        q = 0;
+        while q+1 < qubits { wave = bt_q_cx(wave,q); q += 1; }
+        layer += qubits;
+    }
+    wave
+}
+pub fn bt_q_expect(angles: vector, qubits: i64, readout: i64) -> f64 {
+    bt_require(readout >= 0 && readout < qubits,"Invalid readout qubit");
+    let wave = bt_q_state(angles,qubits);
+    let stride = bt_q_stride(readout);
+    let mut z = 0.0;
+    let mut i = 0;
+    while i < len(wave) {
+        let p = at(wave,i)*at(wave,i);
+        if (i/stride)%2 == 0 { z += p; } else { z -= p; }
+        i += 1;
+    }
+    z
+}
+// Reverse both the circuit and the observable-weighted state. For an Ry
+// pair, 2 lambda^T (dU/dtheta) x = lambda_hi*y_lo - lambda_lo*y_hi.
+pub fn bt_q_gradient(angles: vector, qubits: i64, readout: i64) -> vector {
+    bt_require(readout >= 0 && readout < qubits,"Invalid readout qubit");
+    let mut wave = bt_q_state(angles,qubits);
+    let mut adj = wave;
+    let observed = bt_q_stride(readout);
+    let mut i = 0;
+    while i < len(wave) {
+        if (i/observed)%2 == 1 { adj = buffer_set(adj,i,-at(wave,i)); }
+        i += 1;
+    }
+    let mut result = buffer_fill(len(angles),0.0);
+    let mut end = len(angles);
+    while end > 0 {
+        let mut q = qubits-1;
+        while q > 0 { q -= 1; wave = bt_q_cx(wave,q); adj = bt_q_cx(adj,q); }
+        q = qubits;
+        while q > 0 {
+            q -= 1;
+            let stride = bt_q_stride(q);
+            let mut dz = 0.0;
+            let mut base = 0;
+            while base < len(wave) {
+                let mut j = base;
+                while j < base+stride {
+                    dz += at(adj,j+stride)*at(wave,j)-at(adj,j)*at(wave,j+stride);
+                    j += 1;
+                }
+                base += 2*stride;
+            }
+            let k = end-qubits+q;
+            result = buffer_set(result,k,dz);
+            wave = bt_q_rotate(wave,q,-at(angles,k));
+            adj = bt_q_rotate(adj,q,-at(angles,k));
+        }
+        end -= qubits;
+    }
+    result
+}
+pub fn bt_q_step(angles: vector, qubits: i64, readout: i64, target: f64, rate: f64) -> vector {
+    bt_require(target >= -1.0 && target <= 1.0 && rate > 0.0 && rate-rate == 0.0, "Expected a Z target in [-1,1] and a positive finite rate");
+    let err = bt_q_expect(angles,qubits,readout)-target;
+    let gradient = bt_q_gradient(angles,qubits,readout);
+    let mut next = angles;
+    let mut i = 0;
+    while i < len(angles) {
+        let value = at(angles,i)-rate*err*at(gradient,i);
+        bt_require(value-value == 0.0,"Non-finite circuit update");
+        next = buffer_set(next,i,value % 6.283185307179586);
+        i += 1;
+    }
+    next
+}

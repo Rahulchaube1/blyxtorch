@@ -1,0 +1,10 @@
+use quantum;
+
+fn main() {
+    let angles = [0.3, -0.7, 0.2, 0.6];
+    let mut learned = angles;
+    let mut step = 0;
+    while step < 40 { learned = bt_q_step(learned,2,1,-0.25,0.2); step += 1; }
+    let z = bt_q_expect(learned,2,1);
+    println!(z > -0.26 && z < -0.24);
+}
